@@ -1,3 +1,3 @@
 # Bitgolia-blog
 
-[Bitgolia Blog](httsp://blog.bitgolia.com)
+[Bitgolia Blog](https://blog.bitgolia.com)
