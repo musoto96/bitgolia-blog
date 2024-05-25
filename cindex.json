@@ -1,0 +1,13 @@
+{
+  "dirs": {
+    "drafts": "drafts",
+    "pages": "pages",
+    "templates": "template",
+    "index": "index"
+  },
+  "files": {
+    "template": "page.html",
+    "index": "index.html",
+    "style": "style.css"
+  }
+}

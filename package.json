@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "cindex": "github:musoto96/cindex"
+  }
+}
