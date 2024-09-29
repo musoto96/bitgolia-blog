@@ -1,3 +1,4 @@
+/*
 html {
   overflow-x: hidden;
 }
@@ -99,10 +100,6 @@ body {
 }
 
 .section {
-  /*
-  padding: 2rem;
-  box-shadow: 2px 2px 5px 5px #E5E8E8;
-  */
   margin: 4rem 0rem;
   display: flex;
   flex-direction: column;
@@ -163,3 +160,4 @@ body {
     margin-bottom: 3rem;
   }
 }
+*/
