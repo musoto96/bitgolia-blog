@@ -11,26 +11,26 @@
   <!-- Font  -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300&display=swap" rel="stylesheet"> 
+  <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
 
 </head>
 <body>
 
-<div class="header">
-  <div class="nav">
+<div">
+  <div>
     <a href="https://bitgolia.com">
-      <h1 class="title">Bitgolia</h1>
+      <h1>Bitgolia</h1>
     </a>
   </div>
 </div>
 
-<div class="wrapper">
-  <div class="site-content">
-    <a href="../index.html"><p class="pad">Home</p></a>
+<div>
+  <div>
+    <a href="../index.html"><p>Home</p></a>
     <div class="page-content">
-<section class="pad">
-  <h1 class="page-title title">pfSense 4G Modem</h1>
-  <p class="date pad subtitle">August 27, 2023.</p>
+<section>
+  <h1 class="page-title">pfSense 4G Modem</h1>
+  <p class="date">August 27, 2023.</p>
 
   <br>
   <br>
@@ -126,8 +126,7 @@ u3g0: detached
 ugen0.2: &lt;Huawei Technologies Co., Ltd. HUAWEI Mobile V7R11&gt; at usbus0
 u3g0 on uhub0
 u3g0: &lt;Huawei Mobile Connect - Modem&gt; on usbus0
-u3g0: Found 5 ports. 
-      </code>
+u3g0: Found 5 ports. </code>
     </pre>
 
     <p>
@@ -143,8 +142,7 @@ u3g0: Found 5 ports.
 
     <pre>
       <code>
-[wan_link0] MODEM: can&#39;t ioctl(TIOCMGET) /dev/cuaU0.0: Device not configured 
-      </code>
+[wan_link0] MODEM: can&#39;t ioctl(TIOCMGET) /dev/cuaU0.0: Device not configured </code>
     </pre>
 
     <p>
@@ -176,8 +174,7 @@ u3g0: Found 5 ports.
 
     <pre>
       <code>
-&amp;F&amp;C1&amp;D2E0S0=0
-      </code>
+&amp;F&amp;C1&amp;D2E0S0=0 </code>
     </pre>
 
     <p>
@@ -211,8 +208,7 @@ u3g0: Found 5 ports.
       <code>
 <strong>root#</strong> dmesg | grep -iE &#34;modem|card|huawei&#34;
 ugen0.2: &lt;Huawei Technologies Co., Ltd. HUAWEI Mobile V7R11&gt; at usbus0
-u3g0: &lt;Huawei Mobile Connect - Modem&gt; on usbus0
-      </code>
+u3g0: &lt;Huawei Mobile Connect - Modem&gt; on usbus0 </code>
     </pre>
 
     <p>
@@ -239,8 +235,7 @@ ugen0.2: &lt;Huawei Technologies Co., Ltd. HUAWEI Mobile V7R11&gt; at usbus0, cf
   iManufacturer = 0x0001  &lt;Huawei Technologies Co., Ltd.&gt;
   iProduct = 0x0002  &lt;HUAWEI Mobile V7R11&gt;
   iSerialNumber = 0x0003  &lt;0123456789ABCDEF&gt;
-  bNumConfigurations = 0x0003
-    </code>
+  bNumConfigurations = 0x0003 </code>
   </pre>
 
     <ol start="2">
@@ -264,8 +259,7 @@ Connected
 AT
 OK
 ATCSQ
-ERROR
-      </code>
+ERROR </code>
     </pre>
 
     <p>
@@ -295,8 +289,7 @@ NO CARRIER
 ^HCSQ: &#34;LTE&#34;,41,35,91,28
 ^RSSI: 15
 ^HCSQ: &#34;LTE&#34;,38,30,106,22
-^RSSI: 17
-      </code>
+^RSSI: 17 </code>
     </pre>
 
     <p><a href="#top">[Top]</a></p><br>
@@ -334,8 +327,7 @@ attach 0 {
   match &#34;vendor&#34; &#34;0x12d1&#34;;                      # Find this with: usbconfig dump_device_desc
   match &#34;product&#34; &#34;0x15c1&#34;;                     # Find this with: usbconfig dump_device_desc
   action &#34;/usr/local/bin/create_links.sh %d&#34;;   # A script we will create to map serial ports
-};
-      </code>
+}; </code>
     </pre>
 
     <p>
@@ -348,8 +340,7 @@ attach 0 {
 <strong>root#</strong> sysctl -a | grep -i &#34;huawei&#34;
 ugen0.2: &lt;Huawei Technologies Co., Ltd. HUAWEI Mobile V7R11&gt; at usbus0
 u3g0: &lt;Huawei Mobile Connect - Modem&gt; on usbus0
-dev.u3g.0.%desc: Huawei Mobile Connect - Modem 
-      </code>
+dev.u3g.0.%desc: Huawei Mobile Connect - Modem </code>
     </pre>
 
     <p>
@@ -366,8 +357,7 @@ serial_ports=$(ls /dev/$device.*)
 for port in $serial_ports; do
     link_name=$(echo $port | sed 's/.*\.\(.*\)$/\1/')
     ln -sf $port /dev/cuaU0.$link_name
-done
-      </code>
+done</code>
     </pre>
 
     <p>
@@ -375,8 +365,7 @@ done
     </p>
     <pre>
       <code>
-chmod u+x /usr/local/bin/create_links.sh
-      </code>
+chmod u+x /usr/local/bin/create_links.sh</code>
     </pre>
 
     <p><a href="#top">[Top]</a></p><br>
@@ -419,7 +408,7 @@ chmod u+x /usr/local/bin/create_links.sh
     </div>
   </div>
 
-  <div class="footer">
+  <div>
     <a href="https://github.com/musoto96/cindex.git" target="_blank">
       <p>Documentation</p>
     </a>
