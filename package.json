@@ -1,5 +1,5 @@
 {
   "dependencies": {
-    "cindex": "github:musoto96/cindex"
+    "cindex": "^3.0.2"
   }
 }

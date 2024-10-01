@@ -3,7 +3,8 @@
     "drafts": "drafts",
     "pages": "pages",
     "templates": "template",
-    "index": "index"
+    "index": "index",
+    "categories": "categories"
   },
   "files": {
     "template": "page.html",

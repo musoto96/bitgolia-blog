@@ -1,9 +1,27 @@
+<!--cindex doc: 
+
+You can customize this page directly.
+Add or remove links and sources, etc.
+
+For cindex you only need to have one tag with class="pages-index"
+This is where new pages will be indexed when running cindex up|gen PATH
+
+Where PATH is the destination where your website was initiated e.g. 
+  cindex up . 
+  cindex gen . 
+-->
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Index</title>
+
+  <!--
+    cindex doc: 
+    Change me!
+  -->
+  <title>Bitgolia blog</title>
 
   <!-- Style  -->
   <link rel="stylesheet" href="style.css">
@@ -12,7 +30,6 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
-
 
 </head>
 <body>
@@ -25,19 +42,87 @@
   </div>
 </div>
 
+<hr>
+<br>
+<br>
+
 <div>
-  <section class="pages-index">
-<h2 class="page-title">Articles</h2>
-<ol id="index-list">
-<li class="cindex-index">Sat Jun 03 2023, 21:08:18 - <a href="pages/awk.html">Awk Introduction</a></li>
-<li class="cindex-index">Sun Aug 27 2023, 21:09:33 - <a href="pages/pfsense.html">pfSense 4G Modem</a></li>
+  <div>
+
+  <!--
+    cindex doc:
+    
+    This is the default index page. Where your new pages will be listed when running cindex gen|up PATH
+
+    Where PATH is the destination where your website was initiated e.g. 
+      cindex up . 
+      cindex gen . 
+
+    You can edit all elements inside here, but be sure to leave one tag with class="pages-index" where 
+    the index for your pages will be injected.
+    Currently this class is in the section tag directly below this comment.
+
+    You can find class="pages-index" below this comment. As you see, you can append additional classes for styling, 
+    This will not cause problems to cindex parsing functions.
+
+
+    The links to new pages will appear here, create a draft and run:
+      cindex gen PATH
+
+    Where PATH is the destination where your website was initiated e.g. 
+      cindex gen . 
+
+
+    IMPORTANT: All html content inside the tag with class="pages-index" will be replaced by the content in index/_index.html
+  -->
+
+  <div>
+    
+    <h4>
+      <br>Welcome to Bitgolia Blog by Moises Soto.<br>
+    </h4>
+
+    <br>
+
+
+    <br>
+    <br>
+    <hr>
+    <br>
+    <br>
+
+    <section class="tag-index">
+<h2 class="page-title" id="tagpage-title">Categories</h2>
+<ol id="tag-list">
+<li class="cindex-index"><a href="categories/awk.html">awk</a></li>
+<li class="cindex-index"><a href="categories/unix.html">unix</a></li>
+<li class="cindex-index"><a href="categories/linux.html">linux</a></li>
+<li class="cindex-index"><a href="categories/pfsense.html">pfsense</a></li>
 </ol>
 </section>
-  <div>
-    <a href="https://github.com/musoto96/cindex.git" target="_blank">
-      <p>Documentation</p>
-    </a>
+
   </div>
-</div>
-</body>
+
+  <br>
+  <br>
+  <hr>
+  <br>
+  <br>
+
+  <section class="pages-index">
+<p>Change me in <code>index/_index.html</code></p>
+<h2 class="page-title">Articles</h2>
+<ol id="index-list">
+<li class="cindex-index">Sat Jun 03 2023, 23:02:13 - <a href="pages/awk.html">Awk Introduction</a></li>
+<li class="cindex-index">Sun Aug 27 2023, 23:02:00 - <a href="pages/pfsense.html">pfSense 4G Modem</a></li>
+</ol>
+</section>
+
+  </div>
+
+  <!-- Remove me -->
+  <p>
+    <a href="https://www.npmjs.com/package/cindex" target="_blank">Documentation</a>
+  </p>
+
 </html>
