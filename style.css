@@ -1,6 +1,7 @@
 html {
   font-family: 'Courier Prime', sans-serif;
   font-size: small;
+  overflow-x: hidden;
 }
 
 html a {
