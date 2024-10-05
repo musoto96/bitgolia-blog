@@ -1,0 +1,269 @@
+<section>
+  <h1 class="page-title">Troubleshooting GRUB</h1>
+  <p class="date">October 03, 2024.</p>
+
+  <br>
+  <br>
+  <hr>
+  <br>
+  <br>
+
+  <article>
+
+    <p>
+      The bootloader is the first program that is executed after the firmware has initialized hardware after power-on. The bootloader then hands control over to the kernel to continue with the boot process.<br>
+      <br>
+      GRUB (<strong>GR</strong>and <strong>U</strong>nified <strong>B</strong>ootloader) originated in 1995 with Erich Boleyn, who began modifiying the bootloader from <em>FreeBSD</em>, after realizing that it would be much easier to write a new bootloader from scratch, GRUB was born.<br>
+      <br>
+      <br>
+      On modern systems <strong>GRUB2</strong> will be found, which is a rewrite of version 0 of GRUB, now refered to as <em>GRUB legacy</em>.<br>
+      <br>
+      GRUB2 shares many similarities with <em>GRUB legacy</em> to the end user, but the configuration files have a new structure. GRUB2 has features like: Rescue mode, custom menus, themes, non-x86 architecture support, etc.<br>
+      <br>
+      In this article we will explore and practice a recovery scenario related to the the GRUB2 bootloader in Linux, from here on I will just refer to it as GRUB.<br>
+      <br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<strong>NB: </strong>Only perform this scenario in a controlled environment i.e. virtual machines created for testing purposes.<br>
+    </p>
+
+
+    <br>
+
+    <hr>
+
+    <br>
+
+
+    <h3 id="table-of-contents">
+      Table of contents
+    </h3>
+
+    <ul>
+
+      <li><a href="#table-of-contents">
+        Table of contents
+      </a></li>
+
+      <li><a href="#corrupt-configuration">
+        Corrupt grub.cfg and/or grubenv
+      </a></li>
+
+      <li><a href="#boot-live-os">
+        Booting from a live OS 
+      </a></li>
+
+      <li><a href="#mounting-root-and-boot">
+        Mounting root and boot filesystems
+      </a></li>
+
+      <li><a href="#mounting-special-devices">
+        Mounting special devices
+      </a></li>
+
+      <li><a href="#the-chroot">
+        Change root directory 
+      </a></li>
+
+      <li><a href="#regen-grub-config">
+        Regenerate GRUB configuration
+      </a></li>
+
+      <li><a href="#closing-thoughts">
+        Closing thoughts
+      </a></li>
+
+    </ul>
+
+    <br> 
+
+    <hr>
+
+    <br> 
+
+
+    <h4 id="corrupt-configuration">
+      Corrupt grub.cfg and/or grubenv
+    </h4>
+
+    <p>
+      We will use <a href="https://www.finnix.org/" target="_blank">Finnix</a> as our rescue/live iso since it is lightweight and it is specifically made to be a utility live Linux distribution. You can find more information on Finnix OS official website.<br> 
+      <br>
+
+      Lets start by replacing the content of <code>grub.cfg</code> with random bytes to simulate an invalid/corrupt GRUB configuration file:
+      <pre>
+<code><strong>msoto$</strong> dd if=/dev/urandom bs=1K count=5 1>/boot/grub2/grub.cfg</code>
+      </pre>
+
+      And reboot the machine. The VM should now have booted into a grub shell, since it could not determine the location for the root partition.<br>
+      <img src="../img/troubleshoot_grub2/grub_shell.png" style="width: 500px;">
+      <br>
+    </p>
+
+    <p>
+      Now we have a system that will not boot on its own. And requires some troubleshooting, in this case we know the root partition is fine, and we simply broke the <code>grub.cfg</code> file.<br>
+      <br>
+      <br>
+      <br>
+      Lets try to fix it now.<br>
+      <br>
+      These are the steps we need to perform:
+      <ol>
+        <li>Boot from a live OS</li>
+        <li>Mount the VM root and boot filesystems</li>
+        <li>Mount additional special filesystems: <code>dev</code>, <code>proc</code> and <code>sys</code></li>
+        <li>Change root directory of the current shell into the temporary mountpoint</li>
+        <li>Regenerate GRUB configuration file</li>
+      </ol>
+      <p><a href="#top">[Top]</a></p><br>
+
+      <h4 id="boot-live-os">
+        1. Boot from a live OS
+      </h4>
+      First insert the Finnix iso image into the virtual Optical Drive device on your virtual machine manager.<br>
+      You should now be able to reboot into the live Finnix OS.
+
+      <h4 id="mounting-root-and-boot">
+        2. Mounting root and boot filesystems
+      </h4>
+      Execute <code>lsblk</code> to show all available block devices.<br>
+      If you used LVM the name of the volumes may reveal where the root partition is, if not, you can temporarily mount filesystems and list the files on it until you find the root partition.
+      <pre>
+<code><strong>root@tty1:~#</strong> lsblk
+NAME                       MAJ:MIN RM   SIZE RO TYPE MOUNTPOINTS
+loop0                        7:0    0 420.6M  1 loop /usr/lib/live/mount/rootfs/filesystem.squashfs
+                                                     /run/live/rootfs/filesystem.squashfs
+sda                          8:0    0    20G  0 disk
+├─sda1                       8:1    0     1M  0 part
+├─sda2                       8:2    0     1G  0 part
+└─sda3                       8:3    0    19G  0 part
+  └─fedora_fedora--db-root 254:0    0    15G  0 lvm
+sr0                         11:0    1   498M  0 rom  /usr/lib/live/mount/medium
+                                                     /run/live/medium
+zram0                      252:0    0   987M  0 disk [SWAP]</code></pre>
+
+      <br>
+
+      In this example above we can see that the root partition is probably located in <code>/dev/fedora_fedora-db/root</code> filesystem.<br>
+      <br>
+
+      Lets create a chroot directory under <code>mnt</code> and mount the root filesystem there:
+
+      <pre>
+<code><strong>root@tty1:~#</strong> mkdir /mnt/rootdir
+<strong>root@tty1:~#</strong> mount /dev/fedora_fedora-db/root /mnt/rootdir/
+</code></pre>
+
+      At this moment if you tried to list the files in <code>/mnt/rootdir/boot/</code> it would be empty, so we need to find the partition with the boot filesystem.<br>
+
+      <pre>
+<code><strong>root@tty1:~#</strong> ls -l /mnt/rootdir/boot/
+total 0</code></pre>
+
+      We can use <code>fdisk </code> to find the boot partition
+
+<pre><code><strong>root@tty1:~#</strong> fdisk -l /dev/sda
+Disk /dev/sda: 20 GiB, 21474836480 bytes, 41943040 sectors
+Disk model: VBOX HARDDISK
+Units: sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disklabel type: gpt
+Disk identifier: 6203D0A1-E832-4B84-A153-0757ACF044E4
+
+Device       Start      End  Sectors Size Type
+/dev/sda1     2048     4095     2048   1M BIOS boot
+<strong>/dev/sda2     4096  2101247  2097152   1G Linux extended boot</strong>
+/dev/sda3  2101248 41940991 39839744  19G Linux LVM</pre></code>
+
+      We can see that the disk has a <em>GPT label</em>, in older systems you may see a <em>DOS</em> label, in which case you would mount the partition of type <em><strong>BIOS boot</strong></em>.<br>
+      <em>GPT</em> keeps a protective <em>BIOS boot</em> partition, but we actually need to mount the <em>extended boot</em> partition.
+
+<pre><code><strong>root@tty1:~#</strong> mount /dev/sda2 /mnt/rootdir</code></pre>
+
+      <p><a href="#top">[Top]</a></p><br>
+
+      <h4 id="mounting-special-devices">
+        3. Mounting special devices
+      </h4>
+      At this point, we only need to mount special devices recursively:
+      <ul>
+        <li><code>/dev</code></li>
+        <li><code>/proc</code></li>
+        <li><code>/sys</code></li>
+      </ul>
+
+<pre><code><strong>root@tty1:~#</strong> mount --rbind /dev/ /mnt/rootdir/dev/
+<strong>root@tty1:~#</strong> mount --rbind /sys/ /mnt/rootdir/sys/
+<strong>root@tty1:~#</strong> mount --rbind /proc/ /mnt/rootdir/proc/</code></pre>
+
+
+      <h4 id="the-chroot">
+        4. Change root directory
+      </h4>
+      And we are ready to <code>chroot</code>
+<pre><code><strong>root@tty1:~#</strong> chroot /mnt/rootdir /bin/bash
+<strong>[root@finnix /]#</strong> pwd
+/
+<strong>[root@finnix /]#</strong></code></pre>
+
+      If all is correct you will not get any message, but your <code>$PS1</code> will change.<br>
+      <p><a href="#top">[Top]</a></p><br>
+
+      <h4 id="regen-grub-config">
+        5. Regenerate GRUB configuration
+      </h4>
+      Now we can recreate GRUB configuration:
+<pre><code><strong>[root@finnix /]#</strong> grub2-mkconfig -o /boot/grub2/grub.cfg
+Generating grub configuration file ...
+Adding boot menu entry for UEFI Firmware Settings ...
+done
+<strong>[root@finnix /]#</strong> head /boot/grub2/grub.cfg
+#
+# DO NOT EDIT THIS FILE
+#
+# It is automatically generated by grub2-mkconfig using templates
+# from /etc/grub.d and settings from /etc/default/grub
+#
+
+### BEGIN /etc/grub.d/00_header ###
+set pager=1
+<strong>[root@finnix /]#</strong></code></pre>
+
+      <br>
+      We can verify it looks good.<br>
+      Exit the chroot environment and reboot (don't forget to remove the <em>.iso</em> from the virtual optical drive).
+      <br>
+      <br>
+      The bootloader should now be able to read the Linux kernels available for boot and start the system normally:<br>
+
+      <img src="../img/troubleshoot_grub2/grub_fixed.png" style="width: 500px;">
+
+
+    </p>
+
+    <p><a href="#top">[Top]</a></p><br>
+
+    <br>
+    <br>
+    <br>
+
+    <h4 id="closing-thoughts">
+      Closing thoughts
+    </h4>
+
+    <p>
+      In this article we explored how to repair a corrupt GRUB configuration, the same general steps can be followed for similar problems in the boot process.<br>
+      For instance, in the case of corrupt GRUB installation files, we would issue <code>grub2-install &lt;DEV&gt;</code> to reinstall GRUB, where <code>&lt;DEV&gt</code> would be replaced with the path to the boot partition,
+      followed by the recreation of configuration files with <code>grub2-mkconfig</code>.<br>
+      <br>
+      Other problems in the GRUB stage will be explored in future articles.
+    </p>
+
+    <p><a href="#top">[Top]</a></p><br>
+
+  </article>
+
+  <div class="cindex-tags">
+    grub,linux,troubleshooting
+  </div>
+
+</section>

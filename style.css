@@ -11,3 +11,7 @@ code {
   background-color: aliceblue;
   line-height: normal;
 }
+
+#tag-list li {
+ list-style-type: circle;
+}
