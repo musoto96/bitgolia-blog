@@ -84,10 +84,10 @@
     </h4>
 
     <p>
-      We will be using Alma Linux 9.5 (alma-9.5-x86_64) on this lab, and <a href="https://www.finnix.org/" target="_blank">Finnix</a> as our rescue/live iso since it is lightweight and it is specifically made to be a utility live Linux distribution..<br> 
+      We will be using Alma Linux 9.5 (alma-9.5-x86_64) on this lab, and <a href="https://www.finnix.org/" target="_blank">Finnix</a> as our rescue/live iso since it is lightweight and it is specifically made to be a utility live Linux distribution.<br> 
       <br>
 
-      Lets start by removing initramfs files inside<code>/boot</code> directory:
+      Lets start by removing initramfs files inside <code>/boot</code> directory:
       <pre>
 <code><strong>msoto$</strong> rm -f /boot/initramfs-$(uname -r).img</code>
       </pre>
