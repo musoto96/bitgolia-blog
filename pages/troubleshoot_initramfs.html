@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head id="cindex-gen">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title class="page-title">Troubleshooting initramfs</title>
+
+  <!-- Style  -->
+  <link rel="stylesheet" href="../style.css">
+
+  <!-- Font  -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
+
+</head>
+<body>
+
+<div>
+  <div>
+    <a href="https://bitgolia.com">
+      <h1>Bitgolia</h1>
+    </a>
+  </div>
+</div>
+
+<a href="javascript:history.back()"><p">Back</p></a>
+
+<hr>
+<br>
+<br>
+
+<div>
+  <div>
+    <a href="../index.html"><p">Home</p></a>
+    <div class="page-content">
+<section>
+  <h1 class="page-title">Troubleshooting initramfs</h1>
+  <p class="date">April 04, 2025.</p>
+
+  <br>
+  <br>
+  <hr>
+  <br>
+  <br>
+
+  <article>
+
+    <p>
+      The initial ram filesystem (<strong>initramfs</strong>) is used at the GRUB stage during the Linux boot process.<br>
+      <br>
+      The older mechanism is the Initial Root Disk (<strong>initrd</strong>) also called Initial RAM Disk is no longer used by modern Linux systems, initrd is a fully fledged block device that is mounted by the kernel whereas initramfs is unpacked into a temporary filesystem and does not have the overhead of an entire filesystem.<br>
+      <br>
+      Both of these have the same function, <em>to mount the root filesystem</em>. On encrypted disks the initial filesystem will decrypt the root filesystem and then mount it. It can also be configured to perform additional checks before mounting.
+      <br>
+      It is sometimes necessary to rebuild the initramfs when a linux system is not booting e.g. After making an OS upgrade, compiling a new kernel, etc.<br>
+      <br>
+      In this article we will practice a recovery scenario using <strong>dracut</strong>; a low level tool used for creating initramfs/initrd images.<br>
+      <br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<strong>NB: </strong>Only perform this scenario in a controlled environment i.e. virtual machines created for testing purposes.<br>
+    </p>
+
+
+    <br>
+
+    <hr>
+
+    <br>
+
+
+    <h3 id="table-of-contents">
+      Table of contents
+    </h3>
+
+    <ul>
+
+      <li><a href="#table-of-contents">
+        Table of contents
+      </a></li>
+
+      <li><a href="#breaking-the-system">
+        Breaking the system by removing initramfs file
+      </a></li>
+
+      <li><a href="#boot-live-os">
+        Booting from a live OS 
+      </a></li>
+
+      <li><a href="#mounting-root-and-boot">
+        Mounting root and boot filesystems
+      </a></li>
+
+      <li><a href="#mounting-special-devices">
+        Mounting special devices
+      </a></li>
+
+      <li><a href="#the-chroot">
+        Change root directory 
+      </a></li>
+
+      <li><a href="#regen-initramfs">
+        Using dracut to regenerate initramfs
+      </a></li>
+
+      <li><a href="#closing-thoughts">
+        Closing thoughts
+      </a></li>
+
+    </ul>
+
+    <br> 
+
+    <hr>
+
+    <br> 
+
+
+    <h4 id="breaking-the-system">
+      Breaking the system by removing initramfs file
+    </h4>
+
+    <p>
+      We will be using Alma Linux 9.5 (alma-9.5-x86_64) on this lab, and <a href="https://www.finnix.org/" target="_blank">Finnix</a> as our rescue/live iso since it is lightweight and it is specifically made to be a utility live Linux distribution..<br> 
+      <br>
+
+      Lets start by removing initramfs files inside<code>/boot</code> directory:
+      <pre>
+<code><strong>msoto$</strong> rm -f /boot/initramfs-$(uname -r).img</code>
+      </pre>
+
+      And reboot the machine. After the grub screen we should see a kernel panic and some messages related to missing initramfs and failure to mount the root filesystem.<br>
+      <img src="../img/troubleshoot_initramfs/kernel_panic.png" style="width: 500px;">
+      <br>
+    </p>
+
+    <p>
+      As in my article on <a href="troubleshoot_grub2.html" target="_blank">troubleshooting grub</a>, we now have a system that will not boot on its own. And requires some troubleshooting.<br>
+      <br>
+      <br>
+      Lets try to fix it now.<br>
+      <br>
+      These are the steps we need to perform:
+      <ol>
+        <li>Boot from a live OS</li>
+        <li>Mount the VM root and boot filesystems</li>
+        <li>Mount additional special filesystems: <code>dev</code>, <code>proc</code> and <code>sys</code></li>
+        <li>Change root directory of the current shell into the temporary mountpoint</li>
+        <li>Regenerate GRUB configuration file</li>
+      </ol>
+      <p><a href="#top">[Top]</a></p><br>
+
+      <h4 id="boot-live-os">
+        1. Boot from a live OS
+      </h4>
+      First insert the Finnix iso image into the virtual Optical Drive device on your virtual machine manager.<br>
+      You should now be able to reboot into the live Finnix OS.
+
+      <h4 id="mounting-root-and-boot">
+        2. Mounting root and boot filesystems
+      </h4>
+      Execute <code>lsblk</code> to show all available block devices.<br>
+      If you used LVM the name of the volumes may reveal where the root partition is, if not, you can temporarily mount filesystems and list the files on it until you find the root partition.
+      <pre>
+<code><strong>root@tty1:~#</strong> lsblk
+NAME               MAJ:MIN RM   SIZE RO TYPE MOUNTPOINTS
+loop0                7:0    0 420.6M  1 loop /usr/lib/live/mount/rootfs/filesystem.squashfs
+                                              /run/live/rootfs/filesystem.squashfs
+sda                  8:0    0     8G  0 disk
+├─sda1               8:1    0     1G  0 part
+└─sda2               8:2    0     7G  0 part
+  ├─almalinux-swap 254:0    0   820M  0 lvm
+  └─almalinux-root 254:1    0   6.2G  0 lvm
+sr0                 11:0    1   498M  0 rom  /usr/lib/live/mount/medium
+                                              /run/live/medium
+zram0              252:0    0   987M  0 disk [SWAP]</code></pre>
+
+      <br>
+
+      From the output above we can see that the root partition is probably located in <code>/dev/sda2</code> in the <code>almalinux-root</code> logical volume.<br>
+      <br>
+
+      Lets create a chroot directory under <code>mnt</code> and mount the root filesystem there:
+
+      <pre>
+<code><strong>root@tty1:~#</strong> mkdir /mnt/rootdir
+<strong>root@tty1:~#</strong> vgs
+  VG        #PV #LV #SN Attr   VSize  VFree
+  almalinux   1   2   0 wz--n- <7.00g    0
+<strong>root@tty1:~#</strong> vgchange almalinux -ay
+2 logical volume(s) in volume group "almalinux" now active
+<strong>root@tty1:~#</strong> lvs
+  LV   VG        Attr       LSize   Pool Origin Data%  Meta%  Move Log Cpy%Sync Convert
+  root almalinux -wi-a-----  <6.20g
+  swap almalinux -wi-a----- 820.00m
+<strong>root@tty1:~#</strong> mount /dev/almalinux/root /mnt/rootdir/
+<strong>root@tty1:~#</strong>
+
+</code></pre>
+
+      At this moment if you tried to list the files in <code>/mnt/rootdir/boot/</code> it would be empty, so we need to find the partition with the boot filesystem.<br>
+
+      <pre>
+<code><strong>root@tty1:~#</strong> ls -l /mnt/rootdir/boot/
+total 0</code></pre>
+
+      We can use <code>fdisk </code> to find the boot partition
+
+<pre><code><strong>root@tty1:~#</strong> fdisk -l /dev/sda
+Disk /dev/sda: 8 GiB, 8589934592 bytes, 16777216 sectors
+Disk model: VBOX HARDDISK
+Units: sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disklabel type: dos
+Disk identifier: 0x54607dec
+
+Device     Boot   Start      End  Sectors Size Id Type
+<strong>/dev/sda1  *       2048  2099199  2097152   1G 83 Linux</strong>
+/dev/sda2       2099200 16777215 14678016   7G 8e Linux LVM</pre></code>
+
+      We can see that <code>/dev/sda1</code> is marked as <strong>boot</strong> parition.<br>
+
+<pre><code><strong>root@tty1:~#</strong> mount /dev/sda1 /mnt/rootdir/boot/
+<strong>root@tty1:~#</strong> ls -l /mnt/rootdir/boot/
+total 148232
+-rw-r--r--. 1 root root   226249 Jan 24 09:04 config-5.14.0-503.22.1.el9_5.x86_64
+drwxr-xr-x. 3 root root       17 Feb  3 04:13 efi
+drwx------. 5 root root       97 Feb  3 04:23 grub2
+-rw-------. 1 root root 79150037 Feb  3 04:21 initramfs-0-rescue-d2d776c2dc0d4e50a45b214400ccb34b.img
+-rw-------. 1 root root 34586112 Apr  5 20:00 initramfs-5.14.0-503.22.1.el9_5.x86_64kdump.img
+drwxr-xr-x. 3 root root       21 Feb  3 04:15 loader
+lrwxrwxrwx. 1 root root       52 Feb  3 04:16 symvers-5.14.0-503.22.1.el9_5.x86_64.gz -> /lib/modules/5.14.0-503.22.1.el9_5.x86_64/symvers.gz
+-rw-------. 1 root root  8877138 Jan 24 09:04 System.map-5.14.0-503.22.1.el9_5.x86_64
+-rwxr-xr-x. 1 root root 14467384 Feb  3 04:18 vmlinuz-0-rescue-d2d776c2dc0d4e50a45b214400ccb34b
+-rwxr-xr-x. 1 root root 14467384 Jan 24 09:04 vmlinuz-5.14.0-503.22.1.el9_5.x86_64
+</code></pre>
+
+      <p><a href="#top">[Top]</a></p><br>
+
+      <h4 id="mounting-special-devices">
+        3. Mounting special devices
+      </h4>
+      At this point, we only need to mount special devices recursively:
+      <ul>
+        <li><code>/dev</code></li>
+        <li><code>/proc</code></li>
+        <li><code>/sys</code></li>
+      </ul>
+
+<pre><code><strong>root@tty1:~#</strong> mount --rbind /dev/ /mnt/rootdir/dev/
+<strong>root@tty1:~#</strong> mount --rbind /sys/ /mnt/rootdir/sys/
+<strong>root@tty1:~#</strong> mount --rbind /proc/ /mnt/rootdir/proc/</code></pre>
+
+
+      <h4 id="the-chroot">
+        4. Change root directory
+      </h4>
+      And we are ready to <code>chroot</code>
+<pre><code><strong>root@tty1:~#</strong> chroot /mnt/rootdir /bin/bash
+<strong>[root@finnix /]#</strong> pwd
+/
+<strong>[root@finnix /]#</strong></code></pre>
+
+      If all is correct you will not get any message, but your <code>$PS1</code> will change.<br>
+      <p><a href="#top">[Top]</a></p><br>
+
+      <h4 id="regen-initramfs">
+          5. Using dracut to regenerate initramfs
+      </h4>
+      Now we can regenerate initramfs and optionally GRUB configuration as well:
+<pre><code><strong>[root@finnix /]#</strong> dracut --regenerate-all
+<strong>[root@finnix /]#</strong>
+<strong>[root@finnix /]#</strong> ls -lt /boot/
+total 182576
+<strong>-rw-------  1 root root 35165094 Apr  5 15:02 initramfs-5.14.0-503.22.1.el9_5.x86_64.img</strong>
+-rw-------. 1 root root 34586112 Apr  5 14:00 initramfs-5.14.0-503.22.1.el9_5.x86_64kdump.img
+drwx------. 5 root root       97 Feb  2 22:23 grub2
+-rw-------. 1 root root 79150037 Feb  2 22:21 initramfs-0-rescue-d2d776c2dc0d4e50a45b214400ccb34b.img
+-rwxr-xr-x. 1 root root 14467384 Feb  2 22:18 vmlinuz-0-rescue-d2d776c2dc0d4e50a45b214400ccb34b
+lrwxrwxrwx. 1 root root       52 Feb  2 22:16 symvers-5.14.0-503.22.1.el9_5.x86_64.gz -> /lib/modules/5.14.0-503.22.1.el9_5.x86_64/symvers.gz
+drwxr-xr-x. 3 root root       21 Feb  2 22:15 loader
+drwxr-xr-x. 3 root root       17 Feb  2 22:13 efi
+-rw-r--r--. 1 root root   226249 Jan 24 03:04 config-5.14.0-503.22.1.el9_5.x86_64
+-rw-------. 1 root root  8877138 Jan 24 03:04 System.map-5.14.0-503.22.1.el9_5.x86_64
+-rwxr-xr-x. 1 root root 14467384 Jan 24 03:04 vmlinuz-5.14.0-503.22.1.el9_5.x86_64
+<strong>[root@finnix /]#</strong>
+<strong>[root@finnix /]#</strong> grub2-mkconfig -o /boot/grub2/grub.cfg
+Generating grub configuration file ...
+Adding boot menu entry for UEFI Firmware Settings ...
+done
+<strong>[root@finnix /]#</strong></code></pre>
+
+      <br>
+      Exit the chroot environment and reboot (don't forget to remove the <em>.iso</em> from the virtual optical drive).
+      <br>
+      <br>
+      The initramfs will be called by grub, the root filesystem should be mounted succesfully and the system should start normally:<br>
+
+      <img src="../img/troubleshoot_initramfs/initramfs_fixed.png" style="width: 500px;">
+
+
+    </p>
+
+    <p><a href="#top">[Top]</a></p><br>
+
+    <br>
+    <br>
+    <br>
+
+    <h4 id="closing-thoughts">
+      Closing thoughts
+    </h4>
+
+    <p>
+      In this article we explored how to repair a missing/broken initramfs file, the same steps can be followed to troubleshoot the older initrd file.<br>
+      These steps are useful to troubeshoot and repair broken systems after an OS upgrade e.g. After upgrading RHEL 7.9 to 8.10 the following messages could be seen:
+<pre><code>
+  [  979.529486] dracut[47039] * Stripping files done *
+  [  979.534093] dracut[47039] * Creating image file '/boot/initramfs-3.10.0-1160.132.1.el7.x86_64.tmp' *
+  [ 1007.962783] dracut[47039] * Creating initramfs image file '/boot/initramfs-3.10.0-1160.132.1.el7.x86_64.tmp' done *
+  [ 1226.623324] systemd[1]: Stopping Journal Service...
+  [ 1226.632812] systemd[1]: systemd-tmpfiles-setup.service: Succeeded.
+  [ 1226.636823] systemd[1]: Stopped Create Volatile Files and Directories.
+  [ 1226.647293] systemd[1]: Stopped target Local File Systems.
+  [ 1226.653986] systemd[1]: systemd-sysctl.service: Succeeded.
+  [ 1226.657692] systemd[1]: Stopped Apply Kernel Variables.
+  [ 1226.664139] systemd[1]: Stopped target Local Encrypted Volumes.
+  [ 1226.670894] systemd[1]: Stopped target Slices.
+  [ 1226.676919] systemd[1]: Stopped target Sockets.
+  [ 1226.682819] systemd[1]: iscsiuio.socket: Succeeded.
+  [ 1226.886525] XFS (nvme0n1p2): Unmounting Filesystem</code></pre>
+      <br>
+      The system failed to boot. Although there were no errors during the creation of the initramfs, it was the last step executed before the problem. This led me to rebuild both the initramfs and GRUB configuration, which ultimately resolved the issue.
+    </p>
+
+    <p><a href="#top">[Top]</a></p><br>
+
+  </article>
+
+  <div class="cindex-tags">
+<br><br><div>Tags: <a href="../categories/initramfs.html">initramfs</a>
+<a href="../categories/initrd.html">initrd</a>
+<a href="../categories/grub.html">grub</a>
+<a href="../categories/linux.html">linux</a>
+<a href="../categories/troubleshooting.html">troubleshooting</a></div>
+</div>
+
+</section>
+
+    </div>
+  </div>
+
+  <div class="tag-index">
+  </div>
+
+  <!-- Remove me -->
+  <p>
+    <a href="https://www.npmjs.com/package/cindex" target="_blank">Documentation</a>
+  </p>
+
+</div>
+</body>
+</html>

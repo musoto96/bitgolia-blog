@@ -1,0 +1,105 @@
+<section>
+  <h1 class="page-title">Foresic Analysis</h1>
+  <p class="date">November 03, 2024.</p>
+
+  <br>
+  <br>
+  <hr>
+  <br>
+  <br>
+
+  <article>
+
+    <p>
+      In this article we will conduct some forensic analysis on a laptop I recentry purchased. We will create an image of the disk using Caine OS and we will study it using FTK Imager and other tools.
+    </p>
+
+
+    <br>
+
+    <hr>
+
+    <br>
+
+
+    <h3 id="table-of-contents">
+      Table of contents
+    </h3>
+
+    <ul>
+
+      <li><a href="#table-of-contents">
+        Table of contents
+      </a></li>
+
+      <li><a href="#bootable-disk">
+        Creating a bootable disk
+      </a></li>
+
+      <li><a href="#item-two">
+        item two
+      </a></li>
+
+    </ul>
+
+    <br> 
+
+    <hr>
+
+    <br> 
+
+
+    <h4 id="bootable-disk">
+      Creating a bootable disk.
+    </h4>
+
+    <p>
+      We will use <a href="https://www.caine-live.net">CAINE GNU/Linux OS</a> in order to create and extract an image from the hard disk.
+
+      Head over to the official website and download the latest version. Make sure to check the MD5 or the SHA256 hash of your download against the recorded hash.
+
+      E.g. If you are using Windows you can use the program <code>certutil.exe</code> on the command-line/Powershell:
+      <pre>
+<code>PS C:\Users\msoto\Downloads> certutil -hashfile caine13.0.iso SHA256
+SHA256 hash of caine13.0.iso:
+6d25180757d6a8a71e98706009d7a9ba3613131727fc96c2037d78bbd4c8ce3a
+CertUtil: -hashfile command completed successfully.</code>
+      </pre>
+
+    If it doest match make sure you are not compaing MD5 against SHA256 or that you are comparing against a different version of the download.
+    </p>
+
+      Use Rufus to create bootable USB drive using the Caine iso image.
+
+    <br>
+
+    <p><a href="#top">[Top]</a></p><br>
+
+
+    <h4 id="item-two">
+      item two
+    </h4>
+
+    <p>
+      Bla, bla
+      <br>
+      Item two
+    </p>
+
+    <pre>
+<code>&amp;F&amp;C1&amp;D2E0S0=0</code>
+    </pre>
+
+    <p>
+      Bla, bla
+    </p>
+
+    <p><a href="#top">[Top]</a></p><br>
+
+  </article>
+
+  <div id="cindex-tags">
+    test,sample
+  </div>
+
+</section>

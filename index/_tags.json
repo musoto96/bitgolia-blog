@@ -2,6 +2,8 @@
   "tags": [
     "awk",
     "grub",
+    "initramfs",
+    "initrd",
     "linux",
     "pfsense",
     "troubleshooting",
