@@ -135,32 +135,33 @@
 
     <p>
       As in my article on <a href="troubleshoot_grub2.html" target="_blank">troubleshooting grub</a>, we now have a system that will not boot on its own. And requires some troubleshooting.<br>
-      <br>
-      <br>
-      Lets try to fix it now.<br>
-      <br>
-      These are the steps we need to perform:
-      <ol>
-        <li>Boot from a live OS</li>
-        <li>Mount the VM root and boot filesystems</li>
-        <li>Mount additional special filesystems: <code>dev</code>, <code>proc</code> and <code>sys</code></li>
-        <li>Change root directory of the current shell into the temporary mountpoint</li>
-        <li>Regenerate initramfs and grub configuration file</li>
-      </ol>
-      <p><a href="#top">[Top]</a></p><br>
+    </p>
 
-      <h4 id="boot-live-os">
-        1. Boot from a live OS
-      </h4>
-      First insert the Finnix iso image into the virtual Optical Drive device on your virtual machine manager.<br>
-      You should now be able to reboot into the live Finnix OS.
+    <p>Lets try to fix it now.<br></p>
 
-      <h4 id="mounting-root-and-boot">
-        2. Mounting root and boot filesystems
-      </h4>
-      Execute <code>lsblk</code> to show all available block devices.<br>
-      If you used LVM the name of the volumes may reveal where the root partition is, if not, you can temporarily mount filesystems and list the files on it until you find the root partition.
-      <pre>
+    <p>These are the steps we need to perform:</p>
+
+    <ol>
+      <li>Boot from a live OS</li>
+      <li>Mount the VM root and boot filesystems</li>
+      <li>Mount additional special filesystems: <code>dev</code>, <code>proc</code> and <code>sys</code></li>
+      <li>Change root directory of the current shell into the temporary mountpoint</li>
+      <li>Regenerate initramfs and grub configuration file</li>
+    </ol>
+    <p><a href="#top">[Top]</a></p><br>
+
+    <h4 id="boot-live-os">
+      1. Boot from a live OS
+    </h4>
+    First insert the Finnix iso image into the virtual Optical Drive device on your virtual machine manager.<br>
+    You should now be able to reboot into the live Finnix OS.
+
+    <h4 id="mounting-root-and-boot">
+      2. Mounting root and boot filesystems
+    </h4>
+    Execute <code>lsblk</code> to show all available block devices.<br>
+    If you used LVM the name of the volumes may reveal where the root partition is, if not, you can temporarily mount filesystems and list the files on it until you find the root partition.
+    <pre>
 <code><strong>root@tty1:~#</strong> lsblk
 NAME               MAJ:MIN RM   SIZE RO TYPE MOUNTPOINTS
 loop0                7:0    0 420.6M  1 loop /usr/lib/live/mount/rootfs/filesystem.squashfs
@@ -174,14 +175,14 @@ sr0                 11:0    1   498M  0 rom  /usr/lib/live/mount/medium
                                               /run/live/medium
 zram0              252:0    0   987M  0 disk [SWAP]</code></pre>
 
-      <br>
+    <br>
 
-      From the output above we can see that the root partition is probably located in <code>/dev/sda2</code> in the <code>almalinux-root</code> logical volume.<br>
-      <br>
+    From the output above we can see that the root partition is probably located in <code>/dev/sda2</code> in the <code>almalinux-root</code> logical volume.<br>
+    <br>
 
-      Lets create a chroot directory under <code>mnt</code> and mount the root filesystem there:
+    Lets create a chroot directory under <code>mnt</code> and mount the root filesystem there:
 
-      <pre>
+    <pre>
 <code><strong>root@tty1:~#</strong> mkdir /mnt/rootdir
 <strong>root@tty1:~#</strong> vgs
   VG        #PV #LV #SN Attr   VSize  VFree
@@ -197,13 +198,13 @@ zram0              252:0    0   987M  0 disk [SWAP]</code></pre>
 
 </code></pre>
 
-      At this moment if you tried to list the files in <code>/mnt/rootdir/boot/</code> it would be empty, so we need to find the partition with the boot filesystem.<br>
+    At this moment if you tried to list the files in <code>/mnt/rootdir/boot/</code> it would be empty, so we need to find the partition with the boot filesystem.<br>
 
-      <pre>
+    <pre>
 <code><strong>root@tty1:~#</strong> ls -l /mnt/rootdir/boot/
 total 0</code></pre>
 
-      We can use <code>fdisk </code> to find the boot partition
+    We can use <code>fdisk </code> to find the boot partition
 
 <pre><code><strong>root@tty1:~#</strong> fdisk -l /dev/sda
 Disk /dev/sda: 8 GiB, 8589934592 bytes, 16777216 sectors
@@ -235,39 +236,39 @@ lrwxrwxrwx. 1 root root       52 Feb  3 04:16 symvers-5.14.0-503.22.1.el9_5.x86_
 -rwxr-xr-x. 1 root root 14467384 Jan 24 09:04 vmlinuz-5.14.0-503.22.1.el9_5.x86_64
 </code></pre>
 
-      <p><a href="#top">[Top]</a></p><br>
+    <p><a href="#top">[Top]</a></p><br>
 
-      <h4 id="mounting-special-devices">
-        3. Mounting special devices
-      </h4>
-      At this point, we only need to mount special devices recursively:
-      <ul>
-        <li><code>/dev</code></li>
-        <li><code>/proc</code></li>
-        <li><code>/sys</code></li>
-      </ul>
+    <h4 id="mounting-special-devices">
+      3. Mounting special devices
+    </h4>
+    At this point, we only need to mount special devices recursively:
+    <ul>
+      <li><code>/dev</code></li>
+      <li><code>/proc</code></li>
+      <li><code>/sys</code></li>
+    </ul>
 
 <pre><code><strong>root@tty1:~#</strong> mount --rbind /dev/ /mnt/rootdir/dev/
 <strong>root@tty1:~#</strong> mount --rbind /sys/ /mnt/rootdir/sys/
 <strong>root@tty1:~#</strong> mount --rbind /proc/ /mnt/rootdir/proc/</code></pre>
 
 
-      <h4 id="the-chroot">
-        4. Change root directory
-      </h4>
-      And we are ready to <code>chroot</code>
+    <h4 id="the-chroot">
+      4. Change root directory
+    </h4>
+    And we are ready to <code>chroot</code>
 <pre><code><strong>root@tty1:~#</strong> chroot /mnt/rootdir /bin/bash
 <strong>[root@finnix /]#</strong> pwd
 /
 <strong>[root@finnix /]#</strong></code></pre>
 
-      If all is correct you will not get any message, but your <code>$PS1</code> will change.<br>
-      <p><a href="#top">[Top]</a></p><br>
+    If all is correct you will not get any message, but your <code>$PS1</code> will change.<br>
+    <p><a href="#top">[Top]</a></p><br>
 
-      <h4 id="regen-initramfs">
-          5. Using dracut to regenerate initramfs
-      </h4>
-      Now we can regenerate initramfs and optionally GRUB configuration as well:
+    <h4 id="regen-initramfs">
+        5. Using dracut to regenerate initramfs
+    </h4>
+    Now we can regenerate initramfs and optionally GRUB configuration as well:
 <pre><code><strong>[root@finnix /]#</strong> dracut --regenerate-all
 <strong>[root@finnix /]#</strong>
 <strong>[root@finnix /]#</strong> ls -lt /boot/
@@ -290,22 +291,17 @@ Adding boot menu entry for UEFI Firmware Settings ...
 done
 <strong>[root@finnix /]#</strong></code></pre>
 
-      <br>
-      Exit the chroot environment and reboot (don't forget to remove the <em>.iso</em> from the virtual optical drive).
-      <br>
-      <br>
-      The initramfs will be called by grub, the root filesystem should be mounted succesfully and the system should start normally:<br>
+    <br>
+    Exit the chroot environment and reboot (don't forget to remove the <em>.iso</em> from the virtual optical drive).
+    <br>
+    <br>
+    The initramfs will be called by grub, the root filesystem should be mounted successfully and the system should start normally:<br>
 
-      <img src="../img/troubleshoot_initramfs/initramfs_fixed.png" style="width: 500px;">
+    <img src="../img/troubleshoot_initramfs/initramfs_fixed.png" style="width: 500px;">
 
-
-    </p>
 
     <p><a href="#top">[Top]</a></p><br>
 
-    <br>
-    <br>
-    <br>
 
     <h4 id="closing-thoughts">
       Closing thoughts
@@ -313,7 +309,7 @@ done
 
     <p>
       In this article we explored how to repair a missing/broken initramfs file, the same steps can be followed to troubleshoot the older initrd file.<br>
-      These steps are useful to troubeshoot and repair broken systems after an OS upgrade e.g. After upgrading RHEL 7.9 to 8.10 the following messages could be seen:
+      These steps are useful to troubleshoot and repair broken systems after an OS upgrade e.g. After upgrading RHEL 7.9 to 8.10 the following messages could be seen:
 <pre><code>
   [  979.529486] dracut[47039] * Stripping files done *
   [  979.534093] dracut[47039] * Creating image file '/boot/initramfs-3.10.0-1160.132.1.el7.x86_64.tmp' *

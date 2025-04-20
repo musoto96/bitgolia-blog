@@ -5,6 +5,8 @@
     "initramfs",
     "initrd",
     "linux",
+    "llm",
+    "ollama",
     "pfsense",
     "troubleshooting",
     "unix"

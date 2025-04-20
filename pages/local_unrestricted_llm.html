@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head id="cindex-gen">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title class="page-title">Run a local unrestricted LLM model on Linux</title>
+
+  <!-- Style  -->
+  <link rel="stylesheet" href="../style.css">
+
+  <!-- Font  -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
+
+</head>
+<body>
+
+<div>
+  <div>
+    <a href="https://bitgolia.com">
+      <h1>Bitgolia</h1>
+    </a>
+  </div>
+</div>
+
+<a href="javascript:history.back()"><p">Back</p></a>
+
+<hr>
+<br>
+<br>
+
+<div>
+  <div>
+    <a href="../index.html"><p">Home</p></a>
+    <div class="page-content">
+<section>
+  <h1 class="page-title">Run a local unrestricted LLM model on Linux</h1>
+  <p class="date">April 19, 2025.</p>
+
+  <br>
+  <br>
+  <hr>
+  <br>
+  <br>
+
+  <article>
+
+    <p>
+        In this article we will see how to run a local unrestricted large language model (<strong>LLM</strong>) model that you can use via command line or via browser GUI. We will be running the model on a separate dedicated system to offload the work from our main workstation.<br>
+        In my case I will be using an old <a href="https://www.nvidia.com/en-us/autonomous-machines/embedded-systems/jetson-nano/product-development/" target="_blank">NVIDIA Jetson Nano</a> that has 4GB memory and 128 <em>CUDA cores</em>.<br>
+      <br>
+       We will be using <a href="https://ollama.com/" target="_blank">Ollama</a>. A platform to easily run a variety of LLMs (including unrestricted ones) locally.<br>
+      <br>
+      Additionally, we will be doing some basic kernel tunning in order to better utilize virtual memory resources, adding <em>swap</em>, enabling and tunning <em>zram </em>and other fun system administration tasks.
+      <br>
+      If you happen to be using an <em>NVIDIA Jetson Nano</em> you may find this setup guide on my github useful, I wrote it 5 years ago to remember the steps for setup, but I used it again for this project and they worked fine:<br>
+      <a href="https://github.com/musoto96/jetson-nano-setup-guide" target="_blank">musoto96/jetson-nano-setup-guide</a>.<br>
+      <br>
+      I also recommend using a PMW fan for the Jetson and running the following script to install a fan control daemon since things will be getting toasty:<br>
+      <a href="https://github.com/Pyrestone/jetson-fan-ctl" target="_blank">Pyrestone/jetson-fan-ctl</a>.<br>
+      <br>
+      Without further ado, lets see how to run local, unrestricted LLMs on a Linux system.<br>
+      <br>
+    </p>
+
+
+    <br>
+
+    <hr>
+
+    <br>
+
+
+    <h3 id="table-of-contents">
+      Table of contents
+    </h3>
+
+    <ul>
+
+      <li><a href="#table-of-contents">
+        Table of contents
+      </a></li>
+
+      <li><a href="#installing-ollama">
+        Installing Ollama on Linux
+      </a></li>
+
+      <li><a href="#running-models">
+        Pulling and running LLM models locally
+      </a></li>
+
+      <li><a href="#increase-memory">
+        Using swap to increase memory
+      </a></li>
+
+      <li><a href="#tuning-kernel">
+        Kernel tuning
+      </a></li>
+
+      <li><a href="#web-access">
+        Setting up open-webui for web access
+      </a></li>
+
+      <li><a href="#closing-thoughts">
+        Closing thoughts
+      </a></li>
+
+    </ul>
+
+    <br> 
+
+    <hr>
+
+    <br> 
+
+
+    <h4 id="installing-ollama">
+      Installing Ollama on a Linux system
+    </h4>
+
+    <p>
+      Install Ollama using the instructions provided on Ollama <a href="https://ollama.com/download/linux" target="_blank">official website</a><br>
+      and verify the server is running by checking the default port <code>11434</code>:
+      <pre>
+<code><strong>msoto@jetson:~$</strong> sudo ss -plutn |grep -i ollama
+tcp    LISTEN   0        128             127.0.0.1:11434          0.0.0.0:*      users:(("ollama",pid=3785,fd=3))</code>
+      </pre>
+
+      A <em>command line interface</em> (cli) will be available for use:
+      <pre>
+<code><strong>msoto@jetson:~$</strong> ollama --help
+Large language model runner
+
+Usage:
+  ollama [flags]
+  ollama [command]
+
+Available Commands:
+  serve       Start ollama
+  create      Create a model from a Modelfile
+  show        Show information for a model
+  run         Run a model
+  stop        Stop a running model
+  pull        Pull a model from a registry
+  push        Push a model to a registry
+  list        List models
+  ps          List running models
+  cp          Copy a model
+  rm          Remove a model
+  help        Help about any command
+
+Flags:
+  -h, --help      help for ollama
+  -v, --version   Show version information
+
+Use "ollama [command] --help" for more information about a command.</code>
+      </pre>
+    </p>
+
+    <p>We are now ready to download LLM models from <a href="https://ollama.com/search">Ollama catalog</a>.</p>
+
+    <p><a href="#top">[Top]</a></p><br>
+
+
+
+
+
+    <h4 id="running-models">
+      Pulling and running LLM models locally
+    </h4>
+    Pull a model with <code>ollama pull &lt;MODEL_NAME&gt;:&lt;VERSION&gt;</code> e.g.:<br>
+    
+    <pre>
+<code><strong>msoto@jetson:~$</strong> ollama pull dolphin-phi:2.7b
+pulling manifest 
+pulling 4ec... 100%  ****************** 1.6 GB
+pulling 876... 100%  ******************  10 KB
+pulling a47... 100%  ****************** 106 KB
+...
+verifying sha256 digest 
+writing manifest 
+success</code></pre>
+
+
+    Run the model on the terminal<code>ollama run &lt;MODEL_NAME&gt;:&lt;VERSION&gt;</code> e.g.:<br>
+    
+    <pre>
+<code><strong>msoto@jetson:~$</strong> ollama run dolphin-phi:2.7b
+>>> Send a message (/? for help)</code></pre>
+
+    And you can test if a model is restricted or not by asking it a potentially dangerous or nefarious question e.g.:<br>
+
+    <img src="../img/local_unrestricted_llm/unrestricted_llm.png" style="width: 500px;">
+
+
+    <p><a href="#top">[Top]</a></p><br>
+
+
+
+    <h4 id="increase-memory">
+      Using swap to increase memory and avoid OOM errors
+    </h4>
+
+    If we try to run a larger model relative to the available memory we ill see that the process is killed with the following message:
+
+    <pre>
+<code><strong>msoto@jetson:~$</strong> ollama run dolphin-llama3:8b
+Error: llama runner process has terminated: signal: killed</code></pre>
+
+    If we check kernel messages after this we will see that Linux <em>Out of Memory</em> (OOM) killer killed the process:
+
+    <pre>
+<code><strong>msoto@jetson:~$</strong> dmesg |tail
+[ 4394.072907] Out of memory: Kill process 9602 (ollama) score 548 or sacrifice child
+[ 4394.142428] Killed process 9602 (ollama) total-vm:6335248kB, anon-rss:2441340kB, file-rss:0kB, shmem-rss:0kB
+[ 4395.245813] oom_reaper: reaped process 9602 (ollama), now anon-rss:0kB, file-rss:0kB, shmem-rss:0kB</code></pre>
+
+    If we are unlucky the system may hang and we may need to reboot the machine.<br>
+    We can make use of swap, which essentially trades CPU for memory. When memory is full it will begin to dump data to the swap area, performance will take a hit, but this will allow us to extend virtual memory and run a larger model that we would otherwise not be able to run.<br>
+
+    <br>
+
+    A swap area can be defined by either a file or a filesystem, in this case I will do it via a file. First we will allocate a certain amount of zero bytes to a file using <code>dd</code> we will use a special device <code>/dev/zero</code> for this and in this case I will allocate 4G for swap file <code>4 * 1024 = 4096 MB</code>:
+    <pre>
+<code><strong>msoto@jetson:~$</strong> sudo dd if=/dev/zero of=/swap.img bs=4M count=1024 status=progress
+4290772992 bytes (4.3 GB, 4.0 GiB) copied, 101 s, 42.4 MB/s
+1024+0 records in
+1024+0 records out
+4294967296 bytes (4.3 GB, 4.0 GiB) copied, 111.516 s, 38.5 MB/s</code></pre>
+
+    Next we set correct permissions with <code>chmod</code> and mark the swap file as swap area with <code>mkswap</code>:<br>
+    <pre>
+<code><strong>msoto@jetson:~$</strong> sudo chmod 0600 /swap.img 
+<strong>msoto@jetson:~$</strong> sudo mkswap /swap.img
+Setting up swapspace version 1, size = 4 GiB (4294963200 bytes)
+no label, UUID=e871dfd4-9be7-45b8-90eb-3bb15e80b681</code></pre>
+
+    Finally we will activate/extend the swaparea with <code>swapon</code> and verify we have extended swap area with <code>free</code> (I have 6GB since I already had 2GB swap preallocated):
+    <pre>
+<code><strong>msoto@jetson:~$</strong> sudo swapon /swap.img 
+<strong>msoto@jetson:~$</strong> free -h
+              total        used        free      shared  buff/cache   available
+Mem:           3.9G        969M        472M        4.1M        2.5G        2.7G
+<strong>Swap:          5.9G        1.1G        4.9G</strong></code></pre>
+
+    To make sure this new swap file is used automatically we can add it to <code>/etc/fstab</code>:
+    <pre>
+<code><strong>msoto@jetson:~$</strong> sudo su -
+<strong>root@jetson:~#</strong> cat 0&lt;&lt;EOF 1&gt;&gt;/etc/fstab
+/swap.img  none  swap  defaults  0 0
+EOF
+<strong>root@jetson:~#</strong> tail -1 /etc/fstab
+/swap.img  none  swap  defaults  0 0
+<strong>root@jetson:~#</strong></code></pre>
+
+
+    Now we are able to run a larger model with the help of an increased virtual memory:
+    <pre>
+<strong>root@jetson:~#</strong> exit
+logout
+<strong>msoto@jetson:~$</strong> ollama run dolphin-llama3:8b
+>>> Send a message (/? for help)</code></pre>
+
+
+    <p><a href="#top">[Top]</a></p><br>
+
+
+
+
+
+
+    <h4 id="tuning-kernel">
+      Kernel tuning for swap-heavy workload
+    </h4>
+
+    Swapping is the activity the CPU performs when switching memory pages between physical memory and swap area. How prone the system is to swapping is controlled by a kernel parameter <code>vm.swappiness</code> that can be changed dynamically with <code>sysctl</code> you can check current value (default is 60) with: 
+    <pre>
+<strong>msoto@jetson:~$</strong> sudo sysctl vm.swappiness
+vm.swappiness = 60
+<strong>msoto@jetson:~$</strong></code></pre>
+    
+    We can choose a value from 0-100 (or higher than 100 in some setups), a higher value will cause swapping to be more aggressive.<br>
+    I will bump this to a 100:
+    <pre>
+<strong>msoto@jetson:~$</strong> sudo sysctl vm.swappiness=100
+vm.swappiness = 100
+<strong>msoto@jetson:~$</strong></code></pre>
+
+    I will also be modifying <code>vm.vfs_cache_pressure</code> and <code>vm.page-cluster</code> since I could see a slight improvement in model initialization increasing these values from their defaults.<br>
+    These variables are made accessible via the <code>/proc/sys/vm</code> in the <code>/proc</code> special device. For more information on virtual memory (vm) variables see the <a href="https://docs.kernel.org/6.6/admin-guide/sysctl/vm.html" target="_blank">documentation for /proc/sys/vm</a><br>
+    <pre>
+<strong>msoto@jetson:~$</strong> sudo sysctl vm.vfs_cache_pressure=400
+vm.vfs_cache_pressure = 400
+<strong>msoto@jetson:~$</strong> sudo sysctl vm.page-cluster=4
+vm.page-cluster = 4
+<strong>msoto@jetson:~$</strong></code></pre>
+
+    We can fine-tune these variables by conducting a proper benchmark, but for now this should be OK.
+
+    <p><a href="#top">[Top]</a></p><br>
+
+
+
+
+
+
+    <h4 id="web-access">
+      Setting up open-webui for web access
+    </h4>
+
+    Instead of using the model through a terminal we can setup a Web frontend with docker, there are various front end UIs that integrate with Ollama and other AI tools. Below we will use <a href="https://github.com/open-webui/open-webui" target="_blank">Open-WebUI</a>.<br>
+
+    <br>
+
+    First create a <em>docker compose</em> file with the fllowing command (the entire block is one command, from cat to EOF):
+
+<pre><code><strong>msoto@jetson:~$</strong> cat 0&lt;&lt;EOF 1&gt;$HOME/docker-compose.yml
+  version: "3.3"
+
+  services:
+    open-webui:
+      image: ghcr.io/open-webui/open-webui:main
+      restart: always
+      environment:
+        OLLAMA_BASE_URL: http://127.0.0.1:11434 
+        PORT: 80
+      volumes: 
+        - ./open-webui:/app/backend/data
+      network_mode: host
+EOF
+<strong>msoto@jetson:~$</strong></code></pre>
+
+    This will create a container with Open-WebUI official image, and connect to the Ollama server running locally on port <code>11434</code>, it will also mount a volume on the host <code>./open-webui</code> for data persistency.<br>
+    The Open-WebUI server will be accesible on port 80 of the host.<br>
+
+    <br>
+
+    To start the container simply run <code>docker compose up -d</code> (or <code>docker-compose</code> if using older version of docker compose).<br>
+    You can monitor the status of the container with <code>docker ps</code>, since the compose file has the <code>restart: always</code> directive, the container will automatically start if the container crashes, or when rebooting the computer. To stop the container you can use <code>docker compose down</code> on the same directory where the <code>docker-compose.yml</code> file is located.<br>
+
+    <br>
+
+    We can now access our models from the browser of any other computer in the network by using the private IP address of the machine running Ollama.<br>
+
+    <img src="../img/local_unrestricted_llm/ollama_open-webui.png" style="width: 500px;">
+
+    <p><a href="#top">[Top]</a></p><br>
+
+
+
+
+
+
+
+    <h4 id="closing-thoughts">
+      Closing thoughts
+    </h4>
+
+    <p>
+      In this article we saw how to run a local LLM model using Ollama on a dedicated Linux system, this helps to isolate the workload and avoid having poor performance on our workstation .<br>
+      We allocated a swap area to extend virtual memory and tuned a few virtual memory kernel variables using <code>sysctl</code> that allowed us to run a larger model than the physical memory would allow. Finally we setup a browser UI frontend in front of the Ollama server with a simple <em>docker compose</em> file for ease of access to the LLM models from other systems in the network.
+    </p>
+
+    <p><a href="#top">[Top]</a></p><br>
+
+  </article>
+
+  <div class="cindex-tags">
+<br><br><div>Tags: <a href="../categories/llm.html">llm</a>
+<a href="../categories/ollama.html">ollama</a>
+<a href="../categories/linux.html">linux</a></div>
+</div>
+
+</section>
+
+    </div>
+  </div>
+
+  <div class="tag-index">
+  </div>
+
+  <!-- Remove me -->
+  <p>
+    <a href="https://www.npmjs.com/package/cindex" target="_blank">Documentation</a>
+  </p>
+
+</div>
+</body>
+</html>
