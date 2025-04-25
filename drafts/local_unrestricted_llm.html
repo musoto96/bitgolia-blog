@@ -221,7 +221,7 @@ EOF
 
     Now we are able to run a larger model with the help of an increased virtual memory:
     <pre>
-<strong>root@jetson:~#</strong> exit
+<code><strong>root@jetson:~#</strong> exit
 logout
 <strong>msoto@jetson:~$</strong> ollama run dolphin-llama3:8b
 >>> Send a message (/? for help)</code></pre>
@@ -240,21 +240,21 @@ logout
 
     Swapping is the activity the CPU performs when switching memory pages between physical memory and swap area. How prone the system is to swapping is controlled by a kernel parameter <code>vm.swappiness</code> that can be changed dynamically with <code>sysctl</code> you can check current value (default is 60) with: 
     <pre>
-<strong>msoto@jetson:~$</strong> sudo sysctl vm.swappiness
+<code><strong>msoto@jetson:~$</strong> sudo sysctl vm.swappiness
 vm.swappiness = 60
 <strong>msoto@jetson:~$</strong></code></pre>
     
     We can choose a value from 0-100 (or higher than 100 in some setups), a higher value will cause swapping to be more aggressive.<br>
     I will bump this to a 100:
     <pre>
-<strong>msoto@jetson:~$</strong> sudo sysctl vm.swappiness=100
+<code><strong>msoto@jetson:~$</strong> sudo sysctl vm.swappiness=100
 vm.swappiness = 100
 <strong>msoto@jetson:~$</strong></code></pre>
 
     I will also be modifying <code>vm.vfs_cache_pressure</code> and <code>vm.page-cluster</code> since I could see a slight improvement in model initialization increasing these values from their defaults.<br>
     These variables are made accessible via the <code>/proc/sys/vm</code> in the <code>/proc</code> special device. For more information on virtual memory (vm) variables see the <a href="https://docs.kernel.org/6.6/admin-guide/sysctl/vm.html" target="_blank">documentation for /proc/sys/vm</a><br>
     <pre>
-<strong>msoto@jetson:~$</strong> sudo sysctl vm.vfs_cache_pressure=400
+<code><strong>msoto@jetson:~$</strong> sudo sysctl vm.vfs_cache_pressure=400
 vm.vfs_cache_pressure = 400
 <strong>msoto@jetson:~$</strong> sudo sysctl vm.page-cluster=4
 vm.page-cluster = 4
@@ -280,18 +280,18 @@ vm.page-cluster = 4
     First create a <em>docker compose</em> file with the fllowing command (the entire block is one command, from cat to EOF):
 
 <pre><code><strong>msoto@jetson:~$</strong> cat 0&lt;&lt;EOF 1&gt;$HOME/docker-compose.yml
-  version: "3.3"
+version: "3.3"
 
-  services:
-    open-webui:
-      image: ghcr.io/open-webui/open-webui:main
-      restart: always
-      environment:
-        OLLAMA_BASE_URL: http://127.0.0.1:11434 
-        PORT: 80
-      volumes: 
-        - ./open-webui:/app/backend/data
-      network_mode: host
+services:
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    restart: always
+    environment:
+      OLLAMA_BASE_URL: http://127.0.0.1:11434 
+      PORT: 80
+    volumes: 
+      - ./open-webui:/app/backend/data
+    network_mode: host
 EOF
 <strong>msoto@jetson:~$</strong></code></pre>
 
@@ -305,7 +305,7 @@ EOF
 
     <br>
 
-    We can now access our models from the browser of any other computer in the network by using the private IP address of the machine running Ollama.<br>
+    And we have enabled access to our models from the browser of any other computer in the network by using the private IP address of the machine running Ollama.<br>
 
     <img src="../img/local_unrestricted_llm/ollama_open-webui.png" style="width: 500px;">
 
