@@ -1,0 +1,534 @@
+<section>
+  <h1 class="page-title">Homemade NAS device</h1>
+  <p class="date">June 06, 2026.</p>
+
+  <br>
+  <br>
+  <hr>
+  <br>
+  <br>
+
+  <article>
+
+    <p>
+      In this article I will walk through repurposing an old laptop and external hard drives into a local NAS device with multi-protocol access (NFS and SMB), redundant storage (RAID 5 Array) and redundant power sources (AC wall adapter and laptop battery).<br>
+      In my case, I will be using an old quad-core <em>Intel Celeron N3450</em> processor with 4G of Memory as my NFS/SMB server.
+      <br>
+      <br>
+      I will use three <em>Western Digital</em> 1 TiB hard drive disks. Prioritizing data availability and integrity over storage capacity, I will go for a RAID5 array with which a one disk can be lost at any given time without affecting data access.
+      <br>
+      <br>
+      I will also configure port forwarding on my home router and setup automatic updates of DNS records. I will be utilizing a small utility daemon for <em>name.com</em> and <em>GoDaddy</em> API that can be found here:
+      <a href="https://github.com/musoto96/Dynamic-IP-Updater" target="_blank">musoto96/Dynamic-IP-Updater</a>.
+      <br>
+      It is useful to update dynamic IP addresses (such as the ones given by ISPs to home routers) on DNS records.
+      <br>
+      <br>
+      Additionally, we will be exploring a solution to manage power supply to avoid increased pressure on the battery from having it constantly at 100% charge, I will be using a <em>TP-Link</em>, <em>Kasa Smart Wi-Fi Plug</em> model EP10.
+
+      <picture here>
+      
+      This was the cheapest Wifi enabled, AC adapter I could find that has a <a href="https://github.com/python-kasa/python-kasa">python library to control it programmatically</a>.
+      <br>
+      In the following link a daemon script can be found for Linux to toggle the AC plug on and off to maintain battery within a specific threshold (35 to 75 percent by default): 
+      <a href="https://github.com/musoto96/Kasa-Linux-Powermon" target="_blank">musoto96/Kasa-Linux-Powermon</a>.<br>
+      <br>
+    </p>
+
+    <br>
+    <hr>
+    <br>
+
+    <h3 id="table-of-contents">
+      Table of contents
+    </h3>
+
+    <ul>
+
+      <li><a href="#table-of-contents">
+        Table of contents
+      </a></li>
+
+      <li><a href="#creating-raid-array">
+        Creating a RAID array
+      </a></li>
+
+      <li><a href="#setup-nfs-server">
+        Setup NFS server
+      </a></li>
+
+      <li><a href="#setup-smb-server">
+        Setup SMB server
+      </a></li>
+
+      <li><a href="#benchmarking-throughput">
+        Benchmarking throughput
+      </a></li>
+
+      <li><a href="#port-forwarding-and-power-mgmt">
+        Port forwarding and power management
+      </a></li>
+
+      <li><a href="#updating-dns-records">
+        Updating DNS records
+      </a></li>
+
+      <li><a href="#closing-thoughts">
+        Closing thoughts
+      </a></li>
+
+    </ul>
+
+    <br> 
+    <hr>
+    <br> 
+
+
+    <h4 id="creating-raid-array">
+      Creating a RAID array
+    </h4>
+
+    <p>
+      A RAID array can be created with either a hardware RAID card/controller or with software. A RAID controller comes with its own CPU and memory to offload disk array processing, they also can have a battery module to improve data integrity during a power outage.
+    <br>
+    <br>
+      Software RAID can be used in UNIX/Linux based operating systems with the <code>mdadm</code> binary. The manual entry for <code>md</code> Multiple Device Driver (<code>man 4 md</code>) provides general details about different RAID array types.      
+    </p>
+
+    <table>
+      <tr>
+        <th>RAID Level</th>
+        <th>Minimum disks</th>
+        <th>Optimal for</th>
+      </tr>
+      <tr>
+        <td>RAID0</td>
+        <td>2</td>
+        <td>Performance, the disks are used in stripes</td>
+      </tr>
+      <tr>
+        <td>RAID1</td>
+        <td>2</td>
+        <td>Redundancy, all data will be mirrored to the other disk</td>
+      </tr>
+      <tr>
+        <td>RAID4</td>
+        <td>3</td>
+        <td>Performance + Redundancy at the expense of storage capacity, with three disks, only the capacity from two disks is effective for use</td>
+      </tr>
+      <tr>
+        <td>RAID5</td>
+        <td>3</td>
+        <td>Same as RAID4 with better write parity workload distribution over the disks</td>
+      </tr>
+    </table>
+
+    <p>For more information on these and the other RAID levels please see the Wikipedia article on <a href="https://en.wikipedia.org/wiki/Standard_RAID_levels" target="_blank">Standard RAID Levels</a></p>
+
+    <p>
+      <strong>Note:</strong> The following steps will wipe the partition table and any data on the disks.<br>
+      In my case, I partitioned my hard drives with one primary partition spanning the entire disk, with the <code>fdisk</code> utility:
+
+      <pre><code><strong>root@storage:~# </strong>lsblk /dev/sdz /dev/sdaa /dev/sdab
+NAME      MAJ:MIN RM   SIZE RO TYPE  MOUNTPOINTS
+sdz        65:144  0 931.5G  0 disk
+└─sdz1     65:145  0 931.5G  0 part
+sdaa       65:160  0 931.5G  0 disk
+└─sdaa1    65:161  0 931.5G  0 part
+sdab       65:176  0 931.5G  0 disk
+└─sdab1    65:177  0 931.5G  0 part</code></pre>
+      
+      Then, I created a RAID5 array with the following command:
+    <pre>
+<code><strong>root@storage:~#</strong> mdadm --create /dev/md0 --level=5 --raid-devices=3 /dev/sdz1 /dev/sdaa1 /dev/sdab1</code></pre>
+
+    It will take some time for the array to initialize, the progress can be monitored with <code>mdadm --detail /dev/md0</code>, after finished, it should show in a clean state.
+    <br>
+    <br>
+    After the array is created, a filesystem can be written to the md device (e.g. EXT4 or XFS) with <code>mkfs</code> and then it can be mounted like a regular block device.
+
+    <pre><code><strong>root@storage:~#</strong> lsblk /dev/md0
+NAME  MAJ:MIN RM  SIZE RO TYPE  MOUNTPOINTS
+md0     9:127  0  1.8T  0 raid5 /NAS_Backup </code></pre>
+
+    </p>
+
+
+
+
+    <p><a href="#top">[Top]</a></p><br>
+
+
+
+
+
+    <h4 id="setup-nfs-server">
+      Setup NFS server
+    </h4>
+
+    <p>
+      Network File System (<em>NFS</em>) protocol, more commonly used by Linux/UNIX systems can be set up by installing the respective package, <code>nfs-kernel-server</code> for <em>Ubuntu</em>, <code>nfs-utils</code> for <em>Red Hat</em> based <em>Linux</em> and, included by default in the <em>FreeBSD</em> base operating system.
+    </p>
+
+    <p>
+      The NFS directory that will be exposed for mounting is called an <strong>export</strong>, these are configured in <code>/etc/exports</code>. For example: 
+    </p>
+    
+    <pre><code><strong>root@storage:~#</strong> cat /etc/exports
+/shared            192.168.1.0/255.255.255.0(rw,sync,no_subtree_check)</code></pre>
+
+    <p>
+      will allow to mount <code>/shared</code> to <code>192.168.1.0/24</code> with read and write permissions, more information on the options and further examples are given in the manual page <code>man 5 exports</code>.
+    </p>
+
+    <p>
+      When there are changes to the <code>/etc/exports</code> file, the <code>exportfs</code> binary can be run with the <code>-a</code> option to refresh the exports. In <em>FreeBSD</em> the <code>mountd</code> service should be restarted:
+
+      <pre><code><strong>root@client1:~ #</strong> service mountd restart
+Stopping mountd.
+Waiting for PIDS: 18204.
+Starting mountd.</pre></code></pre>
+    </p>
+
+    <p>
+      To <strong>mount on a client</strong> we can first use the <code>showmount</code> command to show exports available:
+
+      <pre><code><strong>root@client1:~ #</strong> showmount -e 192.168.1.1
+Exports list on 192.168.1.1:
+/shared                            192.168.1.0/255.255.255.0
+/test                              10.37.1.0/24</pre></code></pre>
+
+      If I try to mount the <code>/test</code> export I will get a permission error, because this client is inside <code>192.168.1.0/24</code> network.
+
+      <pre><code><strong>root@client1:~ #</strong> mount -t nfs 192.168.1.1:/test /mnt
+[tcp] 192.168.1.1:/test: Permission denied
+^C
+<strong>root@client1:~ #</strong> mount -t nfs 192.168.1.1:/shared /mnt
+<strong>root@client1:~ #</strong> df -h /mnt
+Filesystem             Size    Used   Avail Capacity  Mounted on
+192.168.1.1:/shared     27G     14G     11G    55%    /mnt
+<strong>root@client1:~ #</strong></pre></code></pre>
+
+    <br>
+
+    <p>
+      <strong>A note on troubleshooting NFS mounts</strong><br>
+      If an error is seen during mounting, consider looking at the logs on the NFS server such as: 
+    </p>
+
+    <ul>
+      <li>In Ubuntu <code>/var/log/syslog</code></li>
+      <li>Output of <code>dmesg</code></li>
+      <li>Output of <code>journalctl -xe</code></li>
+    </ul>
+
+    <p>
+      Mounting with maximum verbosity (<code>-vvv</code> option) and Kernel messages on the client may also reveal some information about the error.
+    </p>
+
+    </p>
+
+
+
+
+    <p><a href="#top">[Top]</a></p><br>
+
+
+
+
+
+    <h4 id="setup-smb-server">
+      Setup SMB server
+    </h4>
+
+    <p>
+      Server Message Block (<em>SMB</em>) protocol more commonly used by Windows systems (it is also sometimes referred to as <em>CIFS</em>, a dialect of SMB), an SMB server can be configured via the <code>samba</code> package, and  for mounting SMB protocol on a Linux/UNIX system the <code>cifs-utils</code> package is needed.
+    </p>
+
+    <p>
+      After installing the SMB server package the main configuration file is located under <code>/etc/samba/smb.conf</code> if <em>LDAP</em> is not needed for authentication, then most of these settings can be left as they are, to create a share an entry like the following example should be created:
+    </p>
+
+    <pre><code><strong>root@storage:~#</strong> cat /etc/samba/smb.conf
+...
+[shared]
+    valid users = root msoto nobody
+    comment = My shared directory
+    path = /shared
+    read only = no
+    browsable = yes
+    writeable = yes</code></pre>
+
+    <p>
+      This will create a share called <code>shared</code> under the path <code>/shared</code>, in Read/Write mode and accessible to the users <code>root</code>, <code>msoto</code> and <code>nobody</code>, this controls who can mount the share, there are also permissions for each file and directory that will be evaluated on access.
+      <br>
+      <br>
+      More information and examples under the manual page <code>man 5 smb.conf</code>.
+    </p>
+
+    <p>
+      To <strong>mount on a Windows client</strong>
+    </p>
+
+    <ol>
+
+      <li>
+        Create a local user which will be used for authentication to the SMB server e.g.:
+        <pre><code><strong>root@storage:~#</strong> id msoto
+uid=1000(msoto) gid=1000(msoto) groups=1000(msoto),4(adm),24(cdrom),27(sudo),30(dip),46(plugdev),101(lxd)</code></pre>
+      </li>
+
+      <br>
+
+      <li>
+        And create an SMB password for it:
+        <pre><code><strong>root@storage:~#</strong> smbpasswd msoto
+New SMB password:
+Retype new SMB password:</code></pre>
+      </li>
+
+      <br>
+
+      <li>
+          Open File Explorer, right click on <code>My PC</code> and select <code>Map Network Drive...</code>
+          <br>
+          <img src="../img/laptop_nas/file_explorer.png" style="height: 500px;">
+      </li>
+
+      <br>
+
+      <li>
+        Type the address or hostname followed by the share name in the format: <code>\\ipaddr_or_hostname\share_name</code><br>
+        In this example, <code>share_name</code> is not the path for our SMB share, but rather the name enclosed by square brackets in <code>smb.conf</code>
+        <br>
+        <img src="../img/laptop_nas/map_drive.png" style="width: 500px;">
+      </li>
+
+      <br>
+
+      <li>
+        Select <code>Connect using different credentials</code>, if network connectivity is fine, a new window should appear asking for user and password.
+      </li>
+
+      <br>
+
+      <li>
+        Enter the credentials previously configured with <code>smbpasswd</code>
+      </li>
+    </ol>
+
+
+
+
+    <p><a href="#top">[Top]</a></p><br>
+
+
+
+
+    <h4 id="benchmarking-throughput">
+      Benchmarking throughput
+    </h4>
+
+    <p>
+      The Flexible I/O tool (<em>FIO</em>) is used for running different types of simulated Input/Output operation workloads on a device, it can be run by providing arguments inline or by passing a job file. There are four general tests we can do to characterize performance: 
+
+      <ul>
+        <li>Random reads</li>
+        <li>Random writes</li>
+        <li>Sequential reads</li>
+        <li>Sequential writes</li>
+      </ul>
+    </p>
+
+    <p>
+      For these tests, I will create a 10G file with <code>dd</code> with random bytes:
+      <pre><code><strong>root@storage:~ #</strong> dd if=/dev/urandom of=/NAS/bigfile.dat bs=1M count=10240 status=progress
+10584326144 bytes (11 GB, 9.9 GiB) copied, 46 s, 230 MB/s
+10240+0 records in
+10240+0 records out
+10737418240 bytes (11 GB, 10 GiB) copied, 46.6889 s, 230 MB/s</code></pre>
+
+        In general, for random Rread/Write workloads, we are interested in achieving higher number of <em>IOPS</em> (Input/Output operations Per Second) and having low latency, for sequential Read/Write workloads the primary metric is usually throughput.
+    </p>
+
+    <p>
+      The following FIO jobs can be saved to a file and be run as <code>fio <em>jobfile.fio</em></code>
+
+      <br>
+      <br>
+      <br>
+
+      <strong>Random reads job file.</strong> 
+
+      <pre><code>[global]
+filename=/NAS/bigfile.dat
+ioengine=libaio
+direct=1
+time_based=1
+runtime=60
+
+[randread]
+rw=randread
+bs=4k
+iodepth=32</code></pre>
+    </p>
+    
+    <br>
+
+    <p>
+      <strong>Random writes job file.</strong>
+
+      <pre><code>[global]
+filename=/NAS/bigfile.dat
+ioengine=libaio
+direct=1
+time_based=1
+runtime=60
+
+[randwrite]
+rw=randwrite
+bs=4k
+iodepth=32</code></pre>
+    </p>
+
+    <br>
+
+    <p>
+      <strong>Sequential reads job file.</strong>
+
+      <pre><code>[global]
+filename=/NAS/bigfile.dat
+ioengine=libaio
+direct=1
+time_based=1
+runtime=60
+
+[read]
+rw=read
+bs=1M
+iodepth=32</code></pre>
+    </p>
+
+    <br>
+
+    <p>
+      <strong>Sequential writes job file.</strong>
+
+      <pre><code>[global]
+filename=/NAS/bigfile.dat
+ioengine=libaio
+direct=1
+time_based=1
+runtime=60
+
+[write]
+rw=write
+bs=1M
+iodepth=32</code></pre>
+    </p>
+
+
+    <p><a href="#top">[Top]</a></p><br>
+
+
+
+
+
+
+    <h4 id="port-forwarding-and-power-mgmt">
+      Port forwarding and power management
+    </h4>
+
+    <p>
+      An SSH tunnel can be used for occasional file access outside of the local network, for NFSv3 or access to additional ports an OpenVPN server would be a better alternative.
+    </p>
+
+    <p>
+      An SSH port should only be exposed to the internet when password authentication is disabled, i.e. authenticating with a private key.
+      <br>
+      <br>
+      The following example command would forward socket on <code>localhost:445</code> on the remote system to port 3445 locally
+
+      <pre><code>ssh -N -p 3022 -i C:\Users\user\.ssh\ip_rsa -L 3445:localhost:445 root@storage.mydomain.com</code></pre>
+
+      The SSH session is the tunnel, as long as it is active, there will be access the SMB port locally on <code>localhost:3445</code> and map the shares.
+    </p>
+
+    <br>
+
+    <p>
+      I wanted to avoid unnecessary pressure on the battery from having it constantly at 100% charge, so I used a smart AC plug from TP Link, and based on battery level, AC power is turned on and off to have charge between 35% and 75%.
+    </p>
+    <p>
+      The script runs as a <em>systemd </em>daemon, battery threshold ranges, and the battery path, can be modified as needed. The script can be found here: <a href="https://github.com/musoto96/Kasa-Linux-Powermon" target="_blank">musoto96/Kasa-Linux-Powermon</a>.<br>
+    </p>
+
+
+    <p><a href="#top">[Top]</a></p><br>
+
+
+
+
+
+
+    <h4 id="updating-dns-records">
+      Updating DNS records automatically
+    </h4>
+
+    <p>
+      For accessing the system over WAN, we need to know the public IP assigned by the Internet Service Provider. While some routers have DDNS clients that can update a DNS record with the IP address assigned to the WAN interface, for quick setups, I like to use another utility script that also runs as a systemd daemon. 
+      <br>
+      <br>
+      It currently works for name.com and GoDaddy API and it will check and update a DNS record every three minutes. More details about its usage and configuration can be found here: 
+      <a href="https://github.com/musoto96/Dynamic-IP-Updater" target="_blank">musoto96/Dynamic-IP-Updater</a>.
+    </p>
+
+
+
+
+
+    <p><a href="#top">[Top]</a></p><br>
+
+
+
+
+
+
+    <h4 id="closing-thoughts">
+      Closing thoughts
+    </h4>
+
+    <p>
+      There is great value in setting up a NAS from scratch as described in this article, it helps with becoming familiar with storage protocols and how access to shared file storage works. It is likely that file ownership and permissions will have to be considered specially if the storage is used from multiple clients. In this case, permissions are based on UNIX ACLs.
+    </p>
+
+    <p>
+      This was a project I had done in mid 2025, but I just got around to finish writing the last entries of the article, this is a picture I took of the setup:
+      
+    </p>
+
+    <img src="../img/laptop_nas/laptop_nas.png" style="width: 500px;">
+
+    <p>
+      Since then, I have moved on to a more robust setup using old hardware, a <em>Cisco UCS 220 m3</em> and a <em>NetApp DS2226</em> connected with an <a href="https://www.amazon.com/SAS9207-8E-Logic-PCIE-3-3V-8Port/dp/B0085FT292""><em>LSI sas9207 8E</em></a> HBA.
+    </p>
+
+    <p>
+      I am working on another article, where I will cover a multi-protocol NAS setup in FreeBSD with a ZFS array, connecting it to a Microsoft Active Directory and accessing the Shares with LDAP credentials, stay tuned for that.
+    </p>
+
+
+
+
+    <p><a href="#top">[Top]</a></p><br>
+
+
+
+
+  </article>
+
+  <div class="cindex-tags">
+    nfs,cifs,smb,linux,nas,storage
+  </div>
+
+</section>

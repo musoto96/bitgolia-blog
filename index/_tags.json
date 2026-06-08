@@ -1,14 +1,10 @@
 {
   "tags": [
-    "awk",
-    "grub",
-    "initramfs",
-    "initrd",
+    "nfs",
+    "cifs",
+    "smb",
     "linux",
-    "llm",
-    "ollama",
-    "pfsense",
-    "troubleshooting",
-    "unix"
+    "nas",
+    "storage"
   ]
 }
