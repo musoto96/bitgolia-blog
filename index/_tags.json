@@ -1,10 +1,16 @@
 {
   "tags": [
-    "nfs",
     "cifs",
-    "smb",
+    "gns3",
     "linux",
     "nas",
-    "storage"
+    "networking",
+    "nfs",
+    "pfsense",
+    "smb",
+    "storage",
+    "vlan",
+    "wellsite",
+    "wits"
   ]
 }

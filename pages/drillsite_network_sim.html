@@ -1,0 +1,938 @@
+<!DOCTYPE html>
+<html lang="en">
+<head id="cindex-gen">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title class="page-title">Drill site industrial network simulation in GNS3</title>
+
+  <!-- Style  -->
+  <link rel="stylesheet" href="../style.css">
+
+  <!-- Font  -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
+
+</head>
+<body>
+
+<div>
+  <div>
+    <a href="https://bitgolia.com">
+      <h1>Bitgolia</h1>
+    </a>
+  </div>
+</div>
+
+<a href="javascript:history.back()"><p">Back</p></a>
+
+<hr>
+<br>
+<br>
+
+<div>
+  <div>
+    <a href="../index.html"><p">Home</p></a>
+    <div class="page-content">
+<section>
+  <h1 class="page-title">Drill site industrial network simulation in GNS3</h1>
+  <p class="date">November 01, 2026.</p>
+
+  <br>
+  <br>
+  <hr>
+  <br>
+  <br>
+
+  <article>
+
+    <p>
+      In this article we'll simulate an example drill site industrial network in <a href="https://www.gns3.com/">GNS3</a> software. <em>GNS3</em> lets you build virtual architectures and displays them in an interactive diagram. 
+      <br>
+      <br>
+      The topology will have Layer 2 and Layer 3 separation and a restrictive firewall policy. Internet access will be possible through a NAT gateway, a simulated cloud connection to an administration network and, a data source in the field. For the latter component, we will use <em>Erdos Miller</em> <a href="https://www.erdosmiller.com/wits-simulator">WITS simulator</a> which will serve as a source of <em>WITS layer 0</em> data.
+      <br>
+      <br>
+      In the energy and petroleum industry the <em>WITS </em>protocol, standing for Wellsite Information Transmission Specification. It is an ASCII based communications format and it has major uses for transmitting equipment and component measurements. These measurements carry information on drilling instrumentation, for example: hoisting, rotation speed, mud circulation, rate of penetration (<em>ROP</em>), etc. 
+      <br>
+      <br>
+      The <em>Erdos Miller WITS simulator</em> seems to combine measurements that, in a real rig, could originate from several PLCs, sensors and other instrumentation systems. We will connect the simulator to the GNS3 lab, via an edge switch, route the traffic between VLANs to our acquisition network and store the data.
+      <br>
+    </p>
+
+    <br>
+    <hr>
+    <br>
+
+    <h3 id="table-of-contents">
+      Table of contents
+    </h3>
+
+    <ul>
+
+      <li><a href="#table-of-contents">
+        Table of contents
+      </a></li>
+
+      <li><a href="#the-topology">
+        The topology
+      </a></li>
+
+      <li><a href="#prerequisites">
+        Prerequisites
+      </a></li>
+
+      <li><a href="#switching-and-vlans">
+        Using Open vSwitch
+      </a></li>
+
+      <li><a href="#pfsense-setup">
+        Setting up pfSense
+      </a></li>
+
+      <li><a href="#configuring-interfaces">
+        Configuring interfaces in pfSense
+      </a></li>
+
+      <li><a href="#configuring-ip-addresses">
+        Configuring IP addresses and accessing pfSense web UI
+      </a></li>
+
+      <li><a href="#adding-internet-connectivity">
+        Adding Internet connectivity
+      </a></li>
+
+      <li><a href="#cross-vlan-communication">
+        Cross VLAN communication
+      </a></li>
+
+      <li><a href="#testing-the-sim">
+        Testing the simulator in the virtual network lab
+      </a></li>
+
+      <li><a href="#closing-thoughts">
+        Closing thoughts
+      </a></li>
+
+    </ul>
+
+    <br> 
+    <hr>
+    <br> 
+
+
+    <h4 id="the-topology">
+      The topology
+    </h4>
+
+    <p>
+      <strong>Layer 2</strong>. In Open vSwitch, we will create the following VLANs for specific purposes:
+      <table id="table-1">
+        <tr>
+          <th>VLAN</th>
+          <th>Usage</th>
+          <th>Description</th>
+        </tr>
+        <tr>
+          <td>VLAN99 - MGMT</td>
+          <td>Management network</td>
+          <td>Management traffic to a Cloud endpoint (host machine)</td>
+        </tr>
+        <tr>
+          <td>VLAN10 - ACQ</td>
+          <td>Acquisition / data integration</td>
+          <td>Segment for centralized data acquisition / integration / processing servers</td>
+        </tr>
+        <tr>
+          <td>VLAN20 - FIELD</td>
+          <td>Field network</td>
+          <td>Network for edge equipment or systems operating on the field.</td>
+        </tr>
+      </table>
+      <br>
+
+
+
+      <strong>Layer 3</strong>. In pfSense we will create three VLAN subinterfaces each with its own /24 range:
+
+      <table id="table-2">
+        <tr>
+          <th>Subinterface</th>
+          <th>VLAN</th>
+          <th>Interface address</th>
+        </tr>
+        <tr>
+          <td>em1.99</td>
+          <td>VLAN99 - MGMT</td>
+          <td>10.10.99.1/24</td>
+        </tr>
+        <tr>
+          <td>em1.10</td>
+          <td>VLAN10 - ACQ</td>
+          <td>10.10.10.1/24</td>
+        </tr>
+        <tr>
+          <td>em1.20</td>
+          <td>VLAN20 - FIELD</td>
+          <td>10.10.20.1/24</td>
+        </tr>
+      </table>
+      <br>
+      <br>
+      Refer to the diagram below for a visual representation of the end architecture.
+      <br>
+      <br>
+    
+      <img src="../img/drillsite_network_sim/topology.png" style="height: 500px;">
+    </p>
+
+
+
+
+
+    <p><a href="#top">[Top]</a></p><br>
+
+
+
+
+
+    <h4 id="prerequisites">
+      Prerequisites
+    </h4>
+
+    <ol>
+      <li>VMware (recommended) or VirtualBox</li>
+      <li>GNS3</li>
+      <li>Wireshark</li>
+      <li>Erdos Miller WITS Simulator</li>
+    </ol>
+
+    <p>
+      <strong>1. VMware (recommended or VirtualBox)</strong>
+    </p>
+    <p>
+      After installing GNS3, the first-launch setup wizard will prompt you to choose a mode of virtualization, either local server (through a local Dynamips GNS3 implementation), or with the GNS3 VM, it can be hosted in either <em>Oracle's VirtualBox</em> or in <em>Broadcom's VMware</em> Workstation/Fusion/Player. GNS3 documentation recommends choosing the GNS3 VM  deployment and hosting it in VMware for best performance. More details on the setup can be found in the following documentation page:<br>
+      <a href="https://docs.gns3.com/docs/getting-started/setup-wizard-gns3-vm">GNS3 Setup wizard with the GNS3 VM</a>
+    </p>
+
+    <p>
+      <strong>2. GNS3</strong>
+    </p>
+    <p>
+      For this simulation we will need the <a href="https://www.gns3.com/software/download">GNS3 software</a>, <a href="https://docs.gns3.com/docs/getting-started/installation/windows">their documentation page</a> shows the minimum requirements as well as  a walkthrough of the installation process (the documentation linked before is for Windows, but there are similar documentation pages on MAC and Linux platforms as well). For anecdotal purposes, I have run this simulation in a Windows 11 Home 26H2 system with 12G of memory and a 4 core Intel N100 CPU.
+    </p>
+
+    <p>
+      <strong>A note on Windows platforms</strong>.
+      I want to briefly mention a workaround I had to implement in my environment. The <em>npcap</em> library seems to have issues with Microsoft Windows <em>KM Test Loopback</em> interfaces. I spent a couple of hours deep into troubleshooting my environment, where I could see successful ARP request and replies, but no Layer 3 traffic initiated, finally finding the answer in a <a href="https://www.gns3.com/community/support/can-t-ping-local-pc-to-gns3-usin">GNS3 forum post</a>:
+      <br>
+      <pre><code>Alain Ewane Feb 16 2025 at 9:37pm[edited]
+
+I had the same issue, and I fixed the issue in 3 steps. 
+1- uninstalled  NPCAP
+2- installed WinPCAP 4.1.3, the most recent.
+3- Rebooted my computer</code></pre>
+      
+      I can confirm, that the components in my lab worked as expected after replacing npcap with WinPCAP (I also used version 4.1.3, which continues to be the latest version available as of the time of writing). It seems like the entire issue can be avoided by not using these legacy virtual adapters and just using one of VMware's virtual host-only interfaces instead.
+    </p>
+    <p>
+      For the GNS3 VM to work correctly on Windows platforms you will need to disable Memory Integrity in Device Security > Core Isolation options, inside Windows Security. This change will require a system restart.
+    </p>
+
+    <p>
+      <strong>3. Wireshark</strong>
+    </p>
+    <p>
+      Installing <a href="https://www.wireshark.org/download.html">Wireshark</a> is also recommended. In the network diagrams created in GNS3 you have the convenient option to right click on a connection and start a packet capture on that interface. Useful for troubleshooting and viewing live traffic on the wire.
+      <br>
+      <br>
+      Make sure the Wireshark installer doesn't clear your WinPcap installation if you are not intending to replace it with npcap, the installer will ask if you want to do so in one of the installation steps.
+    </p>
+
+    <p>
+      <strong>4. Erdos Miller WITS Simulator</strong>
+    </p>
+    <p>
+      This component is specific to Windows, luckily I am running GNS3 in a Windows platform, otherwise, I would need to spin up a Windows VM to install the SIM in, and then have it connected to the lab network.
+      <br>
+      <br>
+      The software can be <a href="https://www.erdosmiller.com/wits-simulator">downloaded for free</a> after filling up a form, there is also a Webinar resource in the same page, showcasing how the simulator works. It can transmit simulated or replayed WITS data via serial or TCP. Another system restart is required after installation.
+    </p>
+
+    
+
+
+
+
+    <p><a href="#top">[Top]</a></p><br>
+
+
+
+
+
+    <h4 id="switching-and-vlans">
+      Using Open vSwitch
+    </h4>
+
+    <p>
+      We'll start by configuring an off-site switch with the multiple VLANs. In the GNS3 UI, you will have ready-to-use resources grouped by type in the left hand side-menu. Clicking on <code>Browse Switches</code> will show available devices in the category. From here the button to: Add a new template, will be shown at the bottom. Select <code>Install an appliance from the GNS3 server</code> and browse to switches and look for the <em>Open vSwitch</em> appliance. You will notice it runs as a docker container instead of an entire VM, this is good.
+    </p>
+
+    <p>
+      After you install the template it will become available for this, and for all future projects. Drag and drop the newly created template to an empty space on the canvas. You can then right-click on it and Start. After a few seconds, double-click on the node to open a console inside it. You should see a Solar PuTTY session start shortly and you will be given a shell prompt in the <em>OVS</em> (Open vSwitch) CLI</em>. The main command to control OVS configuration is <code>ovs-vsctl</code>. The <code>--help</code> option displays its usage.
+
+      <pre><code><strong>OpenvSwitch-1:/#</strong> ovs-vsctl --help
+ovs-vsctl: ovs-vswitchd management utility
+usage: ovs-vsctl [OPTIONS] COMMAND [ARG...]
+
+Open vSwitch commands:
+  init                        initialize database, if not yet initialized
+  show                        print overview of database contents
+  emer-reset                  reset configuration to clean state
+...</code></pre>
+    </p>
+      
+    <p>
+      We will now connect two devices to the switch and have them ping each other. 
+      In the side-menu, click <code>Browse End Devices</code>, and drag and drop two <em>VPCS</em> (standing for Virtual PC Simulator) for this test, I will configure their hostnames (name them) <em>FIELD-TEST</em> and <em>GW-TEST</em>. We need to link the PC nodes to the switch. This can be done by hitting <code>Ctrl+L</code> or clicking on the <code>Add a link</code> button in the side-menu.
+    </p>
+
+    <p>
+      Set aside switch port <code>eth0</code> which we will use for the trunk that will connect to the firewall. Connect both <code>Ethernet0</code> interfaces on the two VPCS' to the switch ports. Opening a shell session to the VPCS nodes, we will be greeted with a CLI with reduced options, but enough for testing network devices. Typing <code>help</code> or <code>?</code> will display the available commands.
+      <br>
+      <br>
+      We don't have a <em>DHCP</em> server or a router so we'll have to manually assign IP addresses. 
+
+      <pre><code><strong>FIELD-TEST></strong> show ip
+
+NAME        : FIELD-TEST[1]
+IP/MASK     : 0.0.0.0/0
+GATEWAY     : 0.0.0.0
+DNS         :
+MAC         : 00:50:79:66:68:00
+LPORT       : 20007
+RHOST:PORT  : 127.0.0.1:20008
+MTU         : 1500</code></pre>
+    </p>
+
+    <p>
+      Since we don't have a router, addresses outside of the network range chosen will not be reachable (no default route). So the IP addresses we choose have to be in the same network for this test, e.g. Choosing IP <code>10.10.10.10/24</code> for <code>GW-TEST</code> and IP <code>10.10.20.10/24</code> for <code>FIELD-TEST</code> will result in no communication:
+
+      <pre><code><strong>FIELD-TEST></strong> ip 10.10.20.10/24
+Checking for duplicate address...
+FIELD-TEST : 10.10.20.10 255.255.255.0
+
+FIELD-TEST> ping 10.10.10.10
+
+No gateway found</code></pre>
+
+      In this example, we would have to either use <code>/16</code> networks so that <code>10.10.20.X</code> and <code>10.10.10.X</code> belong to the same network, or keeping <code>/24</code> and choosing the same network bits for both, for example both addresses inside <code>10.10.10.X</code>. This is a simple example, but it showcases how Layer 3 routing will come into play later on.
+    </p>
+
+    <p>
+      Setting the two devices in the same network, say <code>10.0.0.1/24</code> will allow Layer 3 communication over the switch. We'll now configure a VLAN and, despite the devices being in the same network the traffic will not reach a device that is connected to a switch port that is not tagged with the same VLAN ID.
+      <br>
+      <br>
+      On <code>FIELD-TEST</code>:
+      <pre><code><strong>FIELD-TEST></strong> ip 10.0.0.1/24
+Checking for duplicate address...
+FIELD-TEST : 10.0.0.1 255.255.255.0</code></pre>
+
+      On <code>GW-TEST</code>:
+      <pre><code><strong>GW-TEST></strong> ip 10.0.0.2/24
+Checking for duplicate address...
+FIELD-TEST : 10.0.0.2 255.255.255.0</code></pre>
+
+      <span id="layer2-isolation"></span>Ping continuously from <code>FIELD-TEST</code> to <code>GW-TEST</code>:
+      <pre><code><strong>FIELD-TEST></strong> ping 10.0.0.2 -t
+84 bytes from 10.0.0.2 icmp_seq=1 ttl=64 time=11.509 ms
+84 bytes from 10.0.0.2 icmp_seq=2 ttl=64 time=6.411 ms
+84 bytes from 10.0.0.2 icmp_seq=3 ttl=64 time=2.868 ms
+...</code></pre>
+
+      On OVS, set a VLAN tag on one of the VPCS switch ports:
+      <pre><code><strong>OpenvSwitch-1:/#</strong> ovs-vsctl set port eth1 tag=10
+<strong>OpenvSwitch-1:/#</strong> ovs-vsctl show
+...
+        Port eth1
+            tag: 10
+            Interface eth1
+...</code></pre>
+
+      Immediately the ping we left running will begin to fail
+      <pre><code><strong>GW-TEST></strong> ping 10.0.0.2 -t
+...
+84 bytes from 10.0.0.2 icmp_seq=88 ttl=64 time=4.664 ms
+84 bytes from 10.0.0.2 icmp_seq=89 ttl=64 time=4.178 ms
+10.0.0.2 icmp_seq=90 timeout
+10.0.0.2 icmp_seq=91 timeout
+...</code></pre>
+
+      We have demonstrated Layer 2 segmentation between two VLANs. However, if we have a router connected to the switch, depending on the its configuration, the traffic might be able to reach the router, and this one, in turn, may be able to relay the traffic onto the destination. This will be covered in the next section.
+    </p>
+
+    <p>
+      For now, we'll wire the resources as follows and configure OVS with two VLANs, <ode>VLAN10</ode> for our acquisition network, and <code>VLAN20 </code> for the field network
+      <br>
+      <img src="../img/drillsite_network_sim/using-ovs.png" style="width: 600px;">
+      <table>
+        <tr>
+          <th>Resource</th>
+          <th>Port</th>
+          <th>VLAN</th>
+          <th>IP Address</th>
+        </tr>
+        <tr>
+          <td>GW-TEST</td>
+          <td>eth1</td>
+          <td>10</td>
+          <td>10.10.10.10</td>
+        </tr>
+        <tr>
+          <td>FIELD-TEST</td>
+          <td>eth8</td>
+          <td>20</td>
+          <td>10.10.20.10</td>
+        </tr>
+      </table>
+      <br>
+      In OVS, tag port <code>eth1</code> as <code>10</code> and port <code>eth8</code> as <code>20</code>. To remove a tag use <code>ovs-vsctl clear port eth0 tag</code>.
+      <br>
+      <br>
+      The expected result so far is that the two systems will not be able to communicate with each other, since they not only reside in different networks with no Layer 3 router that connects them, but also on different VLANs.
+    </p>
+
+
+
+
+    <p><a href="#top">[Top]</a></p><br>
+
+
+
+
+    <h4 id="pfsense-setup">
+      Setting up pfSense
+    </h4>
+
+    <p>
+      We'll now connect a <em>pfSense</em> firewall to the switch and begin working on the fun stuff. First, the template will have to be created similar to how it was done for the Open vSwitch image. Unlike OVS, pfSense runs as a VM instead of a docker container. GNS3 will guide you through the import and will even download the required image files for you. 
+      <br>
+      After it is imported, instantiate a pfSense firewall by dragging it onto the diagram. 
+    </p>
+
+    <p>
+      We'll configure port <code>em0</code> on pfSense as a WAN interface that will be behind a NAT gateway for Internet connectivity, and a subinterface on port <code>em1.99</code> for management traffic. Let's begin by configuring the latter, so that we can access the pfSense user interface on a web browser. To do that, we need to connect our host machine into the virtual network with a GNS3 <em>Cloud</em> object, and a spare virtual network adapter in Windows.
+    </p>
+
+    <p>
+      Instantiate a Cloud object connected to your host (not the GNS3 VM). Configure the object to use a spare VMware VMnet virtual adapter (make sure it is host only and not a NAT or DHCP-enabled adapter in <code>VMware > Edit > Virtual Network Editor</code>). In my case I will use a spare KM test loopback interface which can be added on Windows Device Manager as one of the Legacy Hardware options.
+      <br>
+      <br>
+      Connect the Cloud Object to switch port <code>eth15</code> (we will later configure the management VLAN here) and <code>em1</code> on pfSense to switch port <code>eth0</code> (this will be our trunk in the future). Refer to the following diagram:
+    </p>
+    <p>
+      <img src="../img/drillsite_network_sim/pfsense-wiring.png" style="width: 500px;">
+    </p>
+    
+    <br>
+
+    <p>
+      We will add VLAN99 to switch port <code>eth15</code> and convert <code>eth0</code> to a trunk port. 
+      <pre><code><strong>OVS:/#</strong> ovs-vsctl set port eth15 tag=99
+<strong>OVS:/#</strong> ovs-vsctl set port eth0 trunks=10,20,99</code></pre>
+      So far the configured ports should look like this:
+      <pre><code><strong>OVS:/#</strong> ovs-vsctl show
+        ...
+        Port eth1
+            tag: 10
+            Interface eth1
+        ...
+        Port eth8
+            tag: 20
+            Interface eth8
+        ...
+        Port eth0
+            trunks: [10, 20, 99]
+            Interface eth0
+            ...</code></pre>
+
+        The order in the output is not important.
+    </p>
+
+
+
+
+    <p><a href="#top">[Top]</a></p><br>
+
+
+
+
+    <h4 id="configuring-interfaces">
+      Configuring interfaces in pfSense
+    </h4>
+
+    <p>
+      To access pfSense web UI, we need not rely on any fancy two-hop port-forwarding configurations. We will rely on a GNS3 Cloud object connected to our host (not the GNS3 VM) and use one of the VMware VMnet virtual interfaces that gets created automatically on installation. We only need to make sure it is <strong>host-only</strong> and that <strong>DHCP is disabled</strong>. You can confirm or edit these settings by going into VMware Workstation interface, then clicking <code>Edit > Virtual Network Editor...</code>
+    </p>
+
+    <p>
+      We will configure interfaces and subinterfaces pfSense. GNS3 should open a <em>VNC</em> window to connect to pfSense, the only disadvantage is that, unlike in PuTTY/Solar-PuTTY, we can't copy and paste from the host clipboard. Below is the setup for the three VLAN subinterfaces (MGMT, ACQ and FIELD) under physical port <code>em1</code> in pfSense:
+      <br>
+      <br>
+<pre><code>*** Welcome to pfSense 2.7.2-RELEASE (amd64) on pfSense ***
+
+ WAN (wan)       -> em0        ->
+ LAN (lan)       -> em1        -> 
+
+ 0) Logout (SSH only)                  9) pfTop
+ 1) Assign Interfaces                 10) Filter Logs
+ 2) Set interface(s) IP address       11) Restart webConfigurator
+ 3) Reset webConfigurator password    12) PHP shell + pfSense tools
+ 4) Reset to factory defaults         13) Update from console
+ 5) Reboot system                     14) Enable Secure Shell (sshd)
+ 6) Halt system                       15) Restore recent configuration
+ 7) Ping host                         16) Restart PHP-FPM
+ 8) Shell
+
+Enter an option: <strong>1</strong>
+
+
+Valid interfaces are:
+
+em0     0c:29:46:23:00:00 (down) Intel(R) Legacy PRO/1000 MT 82540EM
+em1     0c:29:46:23:00:01 (down) Intel(R) Legacy PRO/1000 MT 82540EM
+em2     0c:29:46:23:00:02 (down) Intel(R) Legacy PRO/1000 MT 82540EM
+em3     0c:29:46:23:00:03 (down) Intel(R) Legacy PRO/1000 MT 82540EM
+em4     0c:29:46:23:00:04 (down) Intel(R) Legacy PRO/1000 MT 82540EM
+em5     0c:29:46:23:00:05 (down) Intel(R) Legacy PRO/1000 MT 82540EM
+
+Do VLANs need to be set up first?
+If VLANs will not be used, or only for optional interfaces, it is typical to
+say no here and use the webConfigurator to configure VLANs later, if required.
+
+Should VLANs be set up now [y|n]? <strong>y</strong>
+
+
+
+VLAN Capable interfaces:
+
+em0     0c:29:46:23:00:00   (up)
+em1     0c:29:46:23:00:01   (up)
+em2     0c:29:46:23:00:02
+em3     0c:29:46:23:00:03
+em4     0c:29:46:23:00:04
+em5     0c:29:46:23:00:05
+
+Enter the parent interface name for the new VLAN (or nothing if finished): <strong>em1</strong>
+Enter the VLAN tag (1-4094): <strong>10</strong>
+
+...
+
+Enter the parent interface name for the new VLAN (or nothing if finished): <strong>em1</strong>
+Enter the VLAN tag (1-4094): <strong>20</strong>
+
+...
+
+Enter the parent interface name for the new VLAN (or nothing if finished): <strong>em1</strong>
+Enter the VLAN tag (1-4094): <strong>99</strong>
+
+
+Enter the parent interface name for the new VLAN (or nothing if finished):
+
+
+VLAN interfaces:
+
+em1.10          VLAN tag 10, parent interface em1
+em1.20          VLAN tag 20, parent interface em1
+em1.99          VLAN tag 99, parent interface em1
+
+If the names of the interfaces are not known, auto-detection can
+be used instead. To use auto-detection, please disconnect all
+interfaces before pressing 'a' to begin the process.
+
+Enter the WAN interface name or 'a' for auto-detection
+(em0 em1 em2 em3 em4 em5 em1.10 em1.20 em1.99 or a): <strong>em0</strong>
+
+
+Enter the LAN interface name or 'a' for auto-detection
+NOTE: this enables full Firewalling/NAT mode.
+(em1 em2 em3 em4 em5 em1.10 em1.20 em1.99 a or nothing if finished): <strong>em1</strong>
+
+Enter the Optional 1 interface name or 'a' for auto-detection
+(em2 em3 em4 em5 em1.10 em1.20 em1.99 a or nothing if finished): <strong>em1.10</strong>
+
+Enter the Optional 2 interface name or 'a' for auto-detection
+(em2 em3 em4 em5 em1.20 em1.99 a or nothing if finished): <strong>em1.20</strong>
+
+Enter the Optional 3 interface name or 'a' for auto-detection
+(em2 em3 em4 em5 em1.99 a or nothing if finished): <strong>em1.99</strong>
+
+Enter the Optional 4 interface name or 'a' for auto-detection
+(em2 em3 em4 em5 a or nothing if finished):
+
+The interfaces will be assigned as follows:
+
+WAN  -> em0
+LAN  -> em1
+OPT1 -> em1.10
+OPT2 -> em1.20
+OPT3 -> em1.99
+
+Do you want to proceed [y|n]? <strong>y</strong>
+
+Writing configuration...done.
+One moment while the settings are reloading... done!
+
+*** Welcome to pfSense 2.7.2-RELEASE (amd64) on pfSense ***
+
+ WAN (wan)       -> em0        ->
+ LAN (lan)       -> em1        -> 
+ OPT1 (opt1)     -> em1.10     ->
+ OPT2 (opt2)     -> em1.20     ->
+ OPT3 (opt3)     -> em1.99     -></code></pre>
+ 
+      <strong>A note on routing</strong>.
+      Before we configure IP addresses on the interfaces, we could let pfSense decide the IP address of our host's virtual adapter (connected to the GNS3 Cloud object), but this will also add a default route (0.0.0.0) to our hosts route table, which will inadvertently route non-lab related traffic to pfSense. So I recommend to choose a static IP. On Windows this can be done in <code>Control Panel > Network and Sharing Center > Change adapter settings</code> or by running <code>ncpa.cpl</code>. 
+      <br>
+      <br>
+      Go to the Adapter's properties, then click on <code>Internet Protocol Version 4 (TCP/IPv4) Properties</code> and set a static IP address inside the management CIDR range e.g. <code>10.10.99.50/24</code> or in subnet mask notation <code>10.10.99.50/255.255.255.0</code>.
+    </p>
+
+    <p>
+      <img src="../img/drillsite_network_sim/windows-cloud-adapter.png" style="height: 400px;">
+    </p>
+
+
+
+
+
+
+    <p><a href="#top">[Top]</a></p><br>
+
+
+
+
+
+
+    <h4 id="configuring-ip-addresses">
+      Configuring IP addresses and accessing pfSense web UI
+    </h4>
+
+    <p>
+      In the pfSense console we will configure IP addresses on the interfaces as per <a href="#table-2" target="_blank">Table 2</a>. For now we will configure management access and to the rest with the pfSense Web UI.
+
+<pre><code>Enter an option: <strong>2</strong>
+
+Available interfaces:
+
+1 - WAN (em0 - dhcp, dhcp6)
+2 - LAN (em1)
+3 - OPT1 (em1.10)
+4 - OPT2 (em1.20)
+5 - OPT3 (em1.99)
+
+Enter the number of the interface you wish to configure: <strong>5</strong>
+
+Configure IPv4 address LAN interface via DHCP? (y/n) <strong>y</strong>
+
+Enter the new LAN IPv4 address.  Press <ENTER> for none:
+> <strong>10.10.99.1</strong>
+
+Subnet masks are entered as bit counts (as in CIDR notation) in pfSense.
+e.g. 255.255.255.0 = 24
+     255.255.0.0   = 16
+     255.0.0.0     = 8
+
+Enter the new OPT3 IPv4 subnet bit count (1 to 32):
+> <strong>24</strong>
+
+For a WAN, enter the new OPT3 IPv4 upstream gateway address.
+For a LAN, press <ENTER> for none:
+>
+
+Configure IPv6 address LAN interface via DHCP6? (y/n) <strong>n</strong>
+
+Enter the new LAN IPv6 address.  Press <ENTER> for none:
+>
+
+Do you want to revert to HTTP as the webConfigurator protocol? (y/n) <strong>n</strong>
+
+Please wait while the changes are saved to LAN...</code></pre>
+
+      <br>
+
+      The following lines confirm the static IP address assigned to this interface, from which pfSense can be accessed.
+
+<pre><code>The IPv4 OPT3 address has been set to 10.10.99.1/24
+You can now access the webConfigurator by opening the following URL in your web browser:
+                <strong>https://10.10.99.1/</strong>
+
+Press &lt;ENTER&gt; to continue.</code></pre>
+
+
+      <br>
+
+      The remaining obstacle to connectivity is <em>pf</em> (standing for Packet Filter, I know, very creative name :p), pfSense's stateful firewall. To temporarily disable it, enter option <code>8</code> to drop to a terminal and run:
+      <pre><code><strong>[2.7.2-RELEASE][root@pfSense.home.arpa]/root:</strong> pfctl -d
+pf disabled</code></pre>
+      <strong>Note:</strong> This should be avoided in a productive or publicly accessible device.
+      <br>
+      <br>
+
+      It will be reenabled after a configuration reload or reboot. This should allow us to, at least temporarily, access pfSense web UI to create a firewall rule for the management network, after which we can reenable the firewall. On the browser go to <code>https://10.10.99.1/</code> and proceed ignoring the certificate warning. <strong>Important:</strong> You don't need to follow the Web Interface wizard that you will be presented with (doing so would wipe configurations done through the CLI thus far). Click on the pfSense icon to redirect to the main dashboard.
+    </p>
+
+    <p>
+      On the pfSense Web interface go to <code>Firewall > Rules > OPT3</code> which is the MGMT VLAN99 subinterface. And create a rule that allows the host's adapter static IP address (<code>10.10.99.50</code>) access to pfSense on <code>TCP/443</code> at <code>10.10.99.1</code> (you can also choose the option labeled <code>This Firewall (self)</code>)
+      <br>
+      <img src="../img/drillsite_network_sim/mgmt_firewall.png" style="height: 400px;">
+      <br>
+      After saving the rule, make sure to apply the changes. This will cause a firewall refresh. If you accidentally lock yourself out, run <code>pfctl -d</code> through the VNC console, to temporarily disable the firewall again (<code>pfctl -e</code> will enable it back manually).
+    </p>
+
+    <p>
+      Configuring the remaining pfSense interfaces with addresses (either through the CLI or the web GUI) according to <a href="#table-2" target="_blank">Table 2</a>:
+      <ul>
+        <li>
+          <code>em1.10</code>
+        </li>
+        <li>
+          <code>em1.20</code>
+        </li>
+      </ul>
+      We will have in pfSense:
+      <pre><code>*** Welcome to pfSense 2.7.2-RELEASE (amd64) on pfSense ***
+
+ WAN (wan)       -> em0        ->
+ LAN (lan)       -> em1        ->
+ OPT1 (opt1)     -> em1.10     -> v4: 10.10.10.1/24
+ OPT2 (opt2)     -> em1.20     -> v4: 10.10.20.1/24
+ OPT3 (opt3)     -> em1.99     -> v4: 10.10.99.1/24</code></pre>
+
+      <strong>Note:</strong> We did not set any IP address or DHCP configuration on the VLAN parent interface <code>em1</code>
+
+    </p>
+
+
+
+
+
+
+
+
+    <p><a href="#top">[Top]</a></p><br>
+
+
+
+
+
+
+    <h4 id="adding-internet-connectivity">
+      Adding Internet connectivity 
+    </h4>
+
+    <p>
+      If we tried to reach a host on the Internet, it would fail since it does not have a default route (this can be seen with <code>netstat -rWn</code>) nor a <em>DNS</em> server with Internet connection (<code>cat /etc/resolv.conf</code>):
+
+      <pre><code><strong>[2.7.2-RELEASE][root@pfSense.home.arpa]/root:</strong> ping google.com
+ping: Unknown host</code></pre> 
+
+    </p>
+
+    <p>
+      To give pfSense Internet access, we can use a NAT object in GNS3. Instantiate a NAT object connected to the host (not the GNS3 VM) by dragging it onto the diagram and link it to the <code>em0</code> port (WAN) on pfSense. The <code>em0</code> port should be configured get an IP address via DHCP by default. If this is not use option <code>2</code> to configure enable DHCP for the interface's IP address.
+    </p>
+
+    <p>
+      After a few seconds of linking it, Internet access should be enabled:
+
+      <pre><code><strong>[2.7.2-RELEASE][root@pfSense.home.arpa]/root:</strong> ping google.com
+PING google.com (142.250.189.14): 56 data bytes
+64 bytes from 142.250.189.14: icmp_seq=0 ttl=127 time=23.874 ms
+64 bytes from 142.250.189.14: icmp_seq=1 ttl=127 time=20.621 ms
+64 bytes from 142.250.189.14: icmp_seq=2 ttl=127 time=19.934 ms
+^C</code></pre> 
+
+      <br>
+      We now have the basic components of the network. Next we will configure firewall rules on pfSense to allow selected traffic to traverse VLANs.
+      <br>
+      <br>
+      <img src="../img/drillsite_network_sim/nat_firewall.png" style="height: 400px;">
+    </p>
+
+
+
+
+
+
+
+
+    <p><a href="#top">[Top]</a></p><br>
+
+
+
+
+
+
+    <h4 id="cross-vlan-communication">
+      Cross VLAN communication
+    </h4>
+
+    <p>
+      Going back to the VPCS nodes, we can either manually request an IP and set a default gateway with <code>ip IP_ADDR GW_ADDR</code> or  request this information via DHCP, if a DHCP server is running in pfSense:
+
+      <pre><code><strong>GW-TEST></strong> dhcp
+DDORA IP 10.10.10.10/24 GW 10.10.10.1
+
+<strong>GW-TEST></strong> show ip
+
+NAME        : GW-TEST[1]
+IP/MASK     : 10.10.10.10/24
+GATEWAY     : 10.10.10.1
+DNS         : 10.10.10.1
+DHCP SERVER : 10.10.10.1
+DHCP LEASE  : 5931, 7200/3600/6300
+DOMAIN NAME : home.arpa
+MAC         : 00:50:79:66:68:01
+LPORT       : 20008
+RHOST:PORT  : 127.0.0.1:20009
+MTU         : 1500</code></pre>
+
+      Trying to ping from <code>FIELD-TEST</code> to <code>GW-TEST</code> will result in a timeout. If we capture packets with Wireshark on the link from OVS to <code>GW-TEST</code> (right click on the link in GNS3 and select <em>Start capture</em> ), we will not see any ICMP traffic being forwarded from pfSense and, even though these devices are connected to the same switch, they are in different VLANs, therefore, different Layer 2 broadcast domains. Even if both were on the same network, they would not be able to communicate as seen in <a href="#layer2-isolation" target="_blank">this section</a>.
+
+      <pre><code><strong>FIELD-TEST></strong> dhcp
+DDORA IP 10.10.20.10/24 GW 10.10.20.1
+
+<strong>FIELD-TEST></strong> show ip
+
+NAME        : FIELD-TEST[1]
+IP/MASK     : 10.10.20.10/24
+GATEWAY     : 10.10.20.1
+DNS         : 10.10.20.1
+DHCP SERVER : 10.10.20.1
+DHCP LEASE  : 4069, 7200/3600/6300
+DOMAIN NAME : home.arpa
+MAC         : 00:50:79:66:68:00
+LPORT       : 20010
+RHOST:PORT  : 127.0.0.1:20011
+MTU         : 1500
+
+<strong>FIELD-TEST></strong> ping 10.10.10.10
+
+10.10.10.10 icmp_seq=1 timeout
+10.10.10.10 icmp_seq=2 timeout
+10.10.10.10 icmp_seq=3 timeout</code></pre>
+
+      Doing a Wireshark packet capture on the trunk link, an ARP from <code>FIELD-TEST</code> asking for the router's hardware address and, after pfSense sends a response, a series of pings without response:
+
+      <pre><code><strong>Time                    Source              destination       Proto  Len  Info</strong>
+2026-11-07 18:32:28.46  Private_66:68:00    Broadcast         ARP    68   Who has 10.10.20.1? Tell 10.10.20.10
+2026-11-07 18:32:28.48  0c:29:46:23:00:01   Private_66:68:00  ARP    46   10.10.20.1 is at 0c:29:46:23:00:01
+2026-11-07 18:32:28.49  10.10.20.10	    10.10.10.10       ICMP   102  Echo (ping) request  id=0x1cc3, seq=1/256, ttl=64 (no response found!)
+2026-11-07 18:32:30.50  10.10.20.10	    10.10.10.10       ICMP   102  Echo (ping) request  id=0x1ec3, seq=2/512, ttl=64 (no response found!)
+...</code></pre>
+
+      This is expected as by default pfSense will have no firewall rules on these interfaces so all traffic is being denied. Creating a temporary rule in OPT2 (VLAN20 interface) that allows ICMP from OPT2 subnets to OPT1 subnets, the ping will succeed (apply the changes after creating the rule in pfSense on the banner that will show up in the interface after saving the rule):
+      <br>
+      <br>
+      <img src="../img/drillsite_network_sim/crossvlan.png" style="height: 400px;">
+    </p>
+
+    <p>
+      <pre><code><strong>FIELD-TEST></strong> ping 10.10.10.10
+
+84 bytes from 10.10.10.10 icmp_seq=1 ttl=63 time=27.462 ms
+84 bytes from 10.10.10.10 icmp_seq=2 ttl=63 time=23.375 ms
+84 bytes from 10.10.10.10 icmp_seq=3 ttl=63 time=22.359 ms
+^C</code></pre>
+    </p>
+
+
+
+
+
+
+    <p><a href="#top">[Top]</a></p><br>
+
+
+
+
+
+
+
+    <h4 id="testing-the-sim">
+      Testing the simulator in the virtual network lab
+    </h4>
+
+    <p>
+      Now that we have the building blocks of the network, and we have gone through the steps on how to communicate different nodes, I will add three more devices: an edge switch (<code>OVS-EDGE</code>), an Alma Linux client to serve as an acquisition device (<code>ACQ-SERVER</code>), and another GNS3 Cloud object connected to a spare VMware virtual adapter, that will be used for the simulated field device sending WITS data over TCP (<code>WELLSITE</code>). The result looks like the following:
+      <br>
+      <br>
+      <img src="../img/drillsite_network_sim/result.png" style="height: 500px;">
+    </p>
+
+    <p>
+      In the <code>ACQ-SERVER</code> we will run a TCP listener with netcat and redirect the output into a file with <code>ncat -l 15020 |tee ./wits_data.txt</code>. The <code>tee</code> command redirects standard output to both the console and to a file, so we can see the WITS packets that are being written as data is received.
+      <br>
+      <br>
+      This implementation serves as a minimal proof of concept for an ingestion interface of an edge acquisition platform. It validates network connectivity, TCP transport, and raw WITS data reception across the segmented network architecture we have been working on.
+      <br>
+      <br>
+      <img src="../img/drillsite_network_sim/poc.png" style="width: 600px;">
+    </p>
+
+
+
+
+    <p><a href="#top">[Top]</a></p><br>
+
+
+
+
+
+<h4 id="closing-thoughts">
+  Closing thoughts
+</h4>
+
+<p>
+  Throughout this article, we have demonstrated several core networking concepts, including Layer 2 segmentation with VLANs, Layer 3 routing between subnets, firewall rules, and packet captures with Wireshark at different points in the network. We have also demonstrated how to connect host-based components, such as the WITS simulator, to a GNS3 lab using virtual network adapters.
+</p>
+
+<p>
+  This lab serves as a proof of concept and an entry point for a deeper dive into WITS and other protocols used in the oil and gas industry. A special thanks to the team at <em>Erdos Miller</em> for developing the simulator and making it available on their website.
+</p>
+
+
+    <p><a href="#top">[Top]</a></p><br>
+
+
+
+
+  </article>
+
+  <div class="cindex-tags">
+<br><br><div>Tags: <a href="../categories/networking.html">networking</a>
+<a href="../categories/gns3.html">gns3</a>
+<a href="../categories/vlan.html">vlan</a>
+<a href="../categories/pfsense.html">pfsense</a>
+<a href="../categories/linux.html">linux</a>
+<a href="../categories/wits.html">wits</a>
+<a href="../categories/wellsite.html">wellsite</a></div>
+</div>
+
+</section>
+
+    </div>
+  </div>
+
+  <div class="tag-index">
+  </div>
+
+  <!-- Remove me -->
+  <p>
+    <a href="https://www.npmjs.com/package/cindex" target="_blank">Documentation</a>
+  </p>
+
+</div>
+</body>
+</html>
